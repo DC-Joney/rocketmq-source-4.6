@@ -564,8 +564,12 @@ public class MappedFile extends ReferenceResource {
                 time = System.currentTimeMillis();
                 try {
 
-                    // “Thread.Sleep(0)作用,就是“触发操作系统立刻重新进行一次CPU竞争”。
-                    // 竞争的结果也许是当前线程仍然获得CPU控制权,也许会换成别的线程获得CPU控制权。
+                    // Thread中sleep函数的作用是让该线程进入休眠状态，让出cpu的执行时间给其他进程，该线程休眠后进入就绪队列和其他线程一起竞争cpu的执行时间。
+                    //
+                    //　所以sleep(0)的作用就是让该线程立即从运行阶段进入就绪队列而非等待队列，释放cpu时间，
+                    // 可以让操作系统切换其他线程来执行，提升效率。
+                    // 总得来说就是，sleep(0)让当前已完成功能的线程让出自己的资源（时间片）给其他线程，
+                    // “Thread.Sleep(0)作用,就是“触发操作系统立刻重新进行一次CPU竞争”。　让其他线程有竞争cpu资源的机会（该线程也在就绪队列参与竞争）
 
                     // 如果是 GC线程 获得CPU控制权 ， 就开始 进行GC处理， 清理其他引用 .
                     // Thread.sleep(0); 的 副作用是： 可能更频繁地运行GC
