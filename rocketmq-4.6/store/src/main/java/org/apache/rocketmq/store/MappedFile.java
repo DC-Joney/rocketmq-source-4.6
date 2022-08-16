@@ -563,6 +563,16 @@ public class MappedFile extends ReferenceResource {
                 log.info("j={}, costTime={}", j, System.currentTimeMillis() - time);
                 time = System.currentTimeMillis();
                 try {
+
+                    // “Thread.Sleep(0)作用,就是“触发操作系统立刻重新进行一次CPU竞争”。
+                    // 竞争的结果也许是当前线程仍然获得CPU控制权,也许会换成别的线程获得CPU控制权。
+
+                    // 如果是 GC线程 获得CPU控制权 ， 就开始 进行GC处理， 清理其他引用 .
+                    // Thread.sleep(0); 的 副作用是： 可能更频繁地运行GC
+                    //  GC线程 获得CPU控制权 的好处：这可以防止 单次GC 操作 长时间运行,
+                    // 比如这里没隔1000次迭代，就尝试GC运行，比一直都不让gc运行，然后让gc长时间运行效果更好 .
+
+                    // 上面的注释，有歧义，准确来说，应该是 prevent long time  gc
                     Thread.sleep(0);
                 } catch (InterruptedException e) {
                     log.error("Interrupted", e);
