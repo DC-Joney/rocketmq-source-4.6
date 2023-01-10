@@ -26,7 +26,6 @@ public class AppendMessageResult {
     // 写入的物理偏移量。
     private long wroteOffset;
     // 写入字节总长度 Write Bytes
-
     private int wroteBytes;
     //  Message ID 消息id
     private String msgId;

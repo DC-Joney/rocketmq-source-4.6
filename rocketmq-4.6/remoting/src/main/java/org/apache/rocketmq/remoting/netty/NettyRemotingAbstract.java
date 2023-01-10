@@ -174,6 +174,8 @@ public abstract class NettyRemotingAbstract {
 
 
     /**
+     *
+     * 处理RPC的request command 请求
      * Process incoming request command issued by remote peer.
      *
      * @param ctx channel handler context.
@@ -402,6 +404,7 @@ public abstract class NettyRemotingAbstract {
         }
     }
 
+    //同步调用
     public RemotingCommand invokeSyncImpl(final Channel channel, final RemotingCommand request,
                                           final long timeoutMillis)
             throws InterruptedException, RemotingSendRequestException, RemotingTimeoutException {
@@ -477,8 +480,8 @@ public abstract class NettyRemotingAbstract {
             }
 
             //根据request ID构建ResponseFuture
-
             final ResponseFuture responseFuture = new ResponseFuture(channel, opaque, timeoutMillis - costTime, invokeCallback, once);
+
             //将ResponseFuture放入responseTable
             this.responseTable.put(opaque, responseFuture);
             try {
@@ -489,7 +492,6 @@ public abstract class NettyRemotingAbstract {
                         if (f.isSuccess()) {
 
                             //如果发送消息成功给Server，那么这里直接Set发出标记后return
-
                             responseFuture.setSendRequestOK(true);
                             return;
                         }
@@ -600,7 +602,9 @@ public abstract class NettyRemotingAbstract {
     }
 
     class NettyEventExecutor extends ServiceThread {
+
         private final LinkedBlockingQueue<NettyEvent> eventQueue = new LinkedBlockingQueue<NettyEvent>();
+
         private final int maxSize = 10000;
 
         public void putNettyEvent(final NettyEvent event) {

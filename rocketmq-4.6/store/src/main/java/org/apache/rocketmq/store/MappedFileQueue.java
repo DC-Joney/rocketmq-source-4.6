@@ -440,6 +440,9 @@ public class MappedFileQueue {
         return deleteCount;
     }
 
+    /**
+     * 对于同步刷盘时，flushLeastPages = 0
+     */
     public boolean flush(final int flushLeastPages) {
         boolean result = true;
         // 这里首先根据  上一次刷盘完成后的offset : flushedWhere ，

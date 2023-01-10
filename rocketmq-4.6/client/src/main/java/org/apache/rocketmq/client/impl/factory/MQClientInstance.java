@@ -293,6 +293,7 @@ public class MQClientInstance {
             }, 1000 * 10, 1000 * 60 * 2, TimeUnit.MILLISECONDS);
         }
 
+        //每30s从namesrv拉取元数据信息到client端
         this.scheduledExecutorService.scheduleAtFixedRate(new Runnable() {
 
             @Override
@@ -385,6 +386,8 @@ public class MQClientInstance {
         }
 
         for (String topic : topicList) {
+
+            //根据topic从namesrv获取元数据信息
             this.updateTopicRouteInfoFromNameServer(topic);
         }
     }
@@ -650,7 +653,7 @@ public class MQClientInstance {
                             }
                         }
                     } else {
-                        //使用指定主题从NameServer获取路由信息
+                        //使用指定的topic从NameServer获取路由信息 GET_ROUTEINTO_BY_TOPIC
                         topicRouteData = this.mQClientAPIImpl.getTopicRouteInfoFromNameServer(topic, 1000 * 3);
                     }
                     if (topicRouteData != null) {

@@ -55,24 +55,35 @@ public class MappedFile extends ReferenceResource {
     // 1 mappedbytebuffer 文件系统缓存    2 专用写入缓存
     protected final AtomicInteger wrotePosition = new AtomicInteger(0);
 
-
     //提交位置
     protected final AtomicInteger committedPosition = new AtomicInteger(0);
 
     //文件系统缓存里边的内容，刷入磁盘的位置
     private final AtomicInteger flushedPosition = new AtomicInteger(0);
+
+    //文件大小
     protected int fileSize;
     protected FileChannel fileChannel;
     /**
      * Message will put to here first, and then reput to FileChannel if writeBuffer is not null.
      */
     protected ByteBuffer writeBuffer = null;
+
+    //用于分配写入缓存的的内存池
     protected TransientStorePool transientStorePool = null;
+
+    //文件名称
     private String fileName;
+
+    //当前文件其实的offset位置
     private long fileFromOffset;
     private File file;
+
+    //当前文件对应的MappedByteBuffer
     private MappedByteBuffer mappedByteBuffer;
     private volatile long storeTimestamp = 0;
+
+    //当前文件是否对应于MappedFileQueue中的第一个文件
     private boolean firstCreateInQueue = false;
 
     public MappedFile() {

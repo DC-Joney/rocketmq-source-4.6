@@ -48,7 +48,7 @@ public class RouteInfoManager {
     private final static long BROKER_CHANNEL_EXPIRED_TIME = 1000 * 60 * 2;
     private final ReadWriteLock lock = new ReentrantReadWriteLock();
 
-    //核心Map: 集群影射： brokerName到Master/Slave机器列表
+    //核心Map: 集群映射： brokerName到Master/Slave机器列表
     private final HashMap<String/* brokerName */, BrokerData> brokerAddrTable;
 
 

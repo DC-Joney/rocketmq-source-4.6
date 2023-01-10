@@ -64,8 +64,12 @@ public class CommitLog {
     //CommitRealTimeService   专用的写入缓存writebuffer提交线程
     private final FlushCommitLogService commitLogService;
 
+    //写入消息协议数据
     private final AppendMessageCallback appendMessageCallback;
+
     private final ThreadLocal<MessageExtBatchEncoder> batchEncoderThreadLocal;
+
+    //用于存储对于topic-queueid的offset，因为对于不通的topic-queueid来说都会有自己的offset
     protected HashMap<String/* topic-queueid */, Long/* offset */> topicQueueTable = new HashMap<String, Long>(1024);
     protected volatile long confirmOffset = -1L;
 
@@ -1494,6 +1498,7 @@ public class CommitLog {
 
             final int bodyLength = msgInner.getBody() == null ? 0 : msgInner.getBody().length;
 
+            //计算消息的长度
             final int msgLen = calMsgLength(msgInner.getSysFlag(), bodyLength, topicLength, propertiesLength);
 
             // Exceeds the maximum message

@@ -338,6 +338,10 @@ public class DefaultMessageStore implements MessageStore {
         }
     }
 
+    /**
+     * 添加消息
+     * @param msg Message instance to store
+     */
     public PutMessageResult putMessage(MessageExtBrokerInner msg) {
         if (this.shutdown) {
             log.warn("message store has shutdown, so putMessage is forbidden");

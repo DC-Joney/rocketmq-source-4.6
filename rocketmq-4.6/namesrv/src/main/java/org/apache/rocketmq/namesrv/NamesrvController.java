@@ -78,8 +78,10 @@ public class NamesrvController {
 
     public boolean initialize() {
 
+        //填充namesrv配置
         this.kvConfigManager.load();
 
+        //创建Remoting Server 用于接收客户端处理
         this.remotingServer = new NettyRemotingServer(this.nettyServerConfig, this.brokerHousekeepingService);
 
         this.remotingExecutor =
@@ -153,11 +155,14 @@ public class NamesrvController {
                 this.remotingExecutor);
         } else {
 
+            //注册默认的处理器
             this.remotingServer.registerDefaultProcessor(new DefaultRequestProcessor(this), this.remotingExecutor);
         }
     }
 
     public void start() throws Exception {
+
+        //启动RPC Server
         this.remotingServer.start();
 
         if (this.fileWatchService != null) {
