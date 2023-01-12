@@ -29,21 +29,55 @@ import java.util.List;
 public class ConsumeQueue {
     private static final InternalLogger log = InternalLoggerFactory.getLogger(LoggerName.STORE_LOGGER_NAME);
 
-    //拉取消息时用到， 存储消息也用到  存储条目的大小
+    //拉取消息时用到， 存储消息也用到  存储条目的大小, 其中8字节
     public static final int CQ_STORE_UNIT_SIZE = 20;
     private static final InternalLogger LOG_ERROR = InternalLoggerFactory.getLogger(LoggerName.STORE_ERROR_LOGGER_NAME);
 
     private final DefaultMessageStore defaultMessageStore;
 
+    /**
+     * 针对ConsumeQueue的MappedFileQueue
+     */
     private final MappedFileQueue mappedFileQueue;
+
+    /**
+     * ConsumeQueue 对应的Topic
+     */
     private final String topic;
+
+    /**
+     * ConsumeQueue对应的queueId
+     */
     private final int queueId;
+
+    /**
+     * 用于存放对应的索引信息
+     */
     private final ByteBuffer byteBufferIndex;
 
+    /**
+     * 存储的文件路径
+     */
     private final String storePath;
+
+    /**
+     *  默认为30M大小
+     */
     private final int mappedFileSize;
+
+    /**
+     * 最大的物理偏移量
+     */
     private long maxPhysicOffset = -1;
+
+    /**
+     * 最小的逻辑偏移量，这里的offset是针对某一个topic + queueId来的
+     */
     private volatile long minLogicOffset = 0;
+
+    /**
+     * ConsumeQueue的扩展属性
+     */
     private ConsumeQueueExt consumeQueueExt = null;
 
     public ConsumeQueue(
@@ -465,6 +499,13 @@ public class ConsumeQueue {
         this.defaultMessageStore.getRunningFlags().makeLogicsQueueError();
     }
 
+    /**
+     * offset
+     * @param offset 指的是 commitLog中的offset
+     * @param size  Message的实际大小
+     * @param tagsCode 消息的tag
+     * @param cqOffset 消息在ConsumeQueue中的offset
+     */
     private boolean putMessagePositionInfo(final long offset, final int size, final long tagsCode,
                                            final long cqOffset) {
 
@@ -480,7 +521,7 @@ public class ConsumeQueue {
         this.byteBufferIndex.putInt(size);  //设置消息的大小
         this.byteBufferIndex.putLong(tagsCode);  //设置消息的tag信息
 
-        //希望拼接到的偏移量=commitLog中的QUEUEOFFSET*20
+        //希望拼接到的偏移量=commitLog中的QUEUEOFFSET*20， consumeQueueOffset * UNIT_SIZE = 实际在ConsumeQueue中的offset
         final long expectLogicOffset = cqOffset * CQ_STORE_UNIT_SIZE;
 
         //从映射文件队列中获取最后一个映射文件
