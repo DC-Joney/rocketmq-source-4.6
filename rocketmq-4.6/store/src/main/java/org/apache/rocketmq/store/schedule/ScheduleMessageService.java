@@ -268,7 +268,8 @@ public class ScheduleMessageService extends ConfigManager {
         }
 
         /**
-         * @return
+         * @param now 当前时间
+         * @param deliverTimestamp 消息的过期时间，这里是绝对时间
          */
         private long correctDeliverTimestamp(final long now, final long deliverTimestamp) {
 
@@ -331,14 +332,18 @@ public class ScheduleMessageService extends ConfigManager {
                             long now = System.currentTimeMillis();
                             long deliverTimestamp = this.correctDeliverTimestamp(now, tagsCode);
 
-                            //下一个消息单元的偏移量
+                            //下一个消息单元的偏移量，既offset++
                             nextOffset = offset + (i / ConsumeQueue.CQ_STORE_UNIT_SIZE);
 
                             long countdown = deliverTimestamp - now;
 
                             //消息的延迟时间到了
                             if (countdown <= 0) {
+
+                                //从commitLog中获取对应的消息
                                 MessageExt msgExt =
+                                        //offsetPy：CommitLog中的offset位置
+                                        //sizePy：消息的size
                                         ScheduleMessageService.this.defaultMessageStore.lookMessageByOffset(offsetPy, sizePy);
 
                                 //锁定消息
@@ -384,6 +389,10 @@ public class ScheduleMessageService extends ConfigManager {
                             } else {
                                 //如果没有到期
                                 //重新构建DeliverDelayedMessageTimerTask，等待下个时间段在来扫描
+                                //这里的nextOffset本质是还是在for循环中需要处理的的offset，举个例子：
+                                //假设offset = 1，i = 0 那么nextOffset = 1，
+                                //假设offset = 1，for循环中 i = 60，那么nextOffset = offset + (i / 20) = 4
+                                //      那么就说明在处理到第四条消息的时候有问题了，需要重新处理
                                 ScheduleMessageService.this.timer.schedule(
                                         new DeliverDelayedMessageTimerTask(this.delayLevel, nextOffset),
                                         countdown);
@@ -392,6 +401,11 @@ public class ScheduleMessageService extends ConfigManager {
                             }
                         } // end of for
 
+
+                        //这里的nextOffset 是在处理完所有延时任务后需要处理的最新一条的offset，
+                        //假设offset = 1，delayLevel对应的messageQueue中有四条消息
+                        //那么在处理完成后 i = 80，因为在结束for循环时还是会执行 i+=CQ_UNIT_SIZE
+                        //那么nextOffset = (1 + 80 / 20) = 5
                         nextOffset = offset + (i / ConsumeQueue.CQ_STORE_UNIT_SIZE);
                         ScheduleMessageService.this.timer.schedule(new DeliverDelayedMessageTimerTask(
                                 this.delayLevel, nextOffset), DELAY_FOR_A_WHILE);

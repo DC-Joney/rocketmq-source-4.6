@@ -20,10 +20,15 @@ import java.nio.ByteBuffer;
 
 public class SelectMappedBufferResult {
 
+
+    //MappedByteBuffer消息的起始offset
     private final long startOffset;
 
+
+    //startOffset -(至) MappedFile.readPosition 的buffer
     private final ByteBuffer byteBuffer;
 
+    //查找的offset 到 MappedFile.readPosition 的区间大小
     private int size;
 
     private MappedFile mappedFile;
