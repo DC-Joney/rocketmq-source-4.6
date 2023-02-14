@@ -20,6 +20,12 @@ import java.nio.ByteBuffer;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 
+
+/**
+ * IndexHeader 用于表示当前Index文件的范围包括hashSlot的实际长度以及索引的实际长度如下
+ *
+ * |  8 (beginTimestamp)  |  8 (endTimestamp)  |  8 (beginPhyOffset)  |  8 (endPhyOffset) |  4 (hashSlotCount) | 4  (indexCount) |
+ */
 public class IndexHeader {
     public static final int INDEX_HEADER_SIZE = 40;
     private static int beginTimestampIndex = 0;
@@ -29,6 +35,10 @@ public class IndexHeader {
     private static int hashSlotcountIndex = 32;
     private static int indexCountIndex = 36;
     private final ByteBuffer byteBuffer;
+
+    /**
+     *
+     */
     private AtomicLong beginTimestamp = new AtomicLong(0);
     private AtomicLong endTimestamp = new AtomicLong(0);
     private AtomicLong beginPhyOffset = new AtomicLong(0);
