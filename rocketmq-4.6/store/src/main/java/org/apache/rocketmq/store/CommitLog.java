@@ -765,6 +765,7 @@ public class CommitLog {
                 // 这个和主从Broker同步复制使用同样的类，
                 // 该类主要记录了当前写入后需要等待刷盘的进度，
                 // 只有达到该进度才从阻塞中返回
+                // writeOffset  为未写入数据前的writeOffset，writeBytes为当前消息的大小
                 GroupCommitRequest request = new GroupCommitRequest(result.getWroteOffset() + result.getWroteBytes());
                 service.putRequest(request);
                 //等待同步刷盘任务完成或发生失败
@@ -1221,6 +1222,9 @@ public class CommitLog {
     }
 
     public static class GroupCommitRequest {
+
+        // writeOffset  为未写入数据前的writeOffset，writeBytes为当前消息的大小
+        // nextOffset = writeOffset + writeBytes
         private final long nextOffset;
         private final CountDownLatch countDownLatch = new CountDownLatch(1);
         private volatile boolean flushOK = false;
@@ -1313,7 +1317,6 @@ public class CommitLog {
                             // 若是上一次的刷盘位置大于等于NextOffset，
                             // 就说明NextOffset位置已经被刷新过了，不需要刷新，
                             // 否则调用mappedFileQueue的flush方法进行刷盘
-
                             flushOK = CommitLog.this.mappedFileQueue.getFlushedWhere() >= req.getNextOffset();
 
                             if (!flushOK) {

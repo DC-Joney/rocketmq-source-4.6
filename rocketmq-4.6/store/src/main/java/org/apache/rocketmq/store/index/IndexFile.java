@@ -29,7 +29,15 @@ import org.apache.rocketmq.store.MappedFile;
 
 public class IndexFile {
     private static final InternalLogger log = InternalLoggerFactory.getLogger(LoggerName.STORE_LOGGER_NAME);
+
+    /**
+     * hashSlot 中index占用的字节数
+     */
     private static int hashSlotSize = 4;
+
+    /**
+     * 实际的消息索引占用的字节数
+     */
     private static int indexSize = 20;
     private static int invalidIndex = 0;
 
@@ -42,12 +50,17 @@ public class IndexFile {
      * 单个索引文件存放的索引个数 500_0000 * 4 = 2000W
      */
     private final int indexNum;
+
+    /**
+     * 每一个IndexFile都对应一个MappedFile, IndexService对应的MappedFileQueue
+     */
     private final MappedFile mappedFile;
     private final FileChannel fileChannel;
     private final MappedByteBuffer mappedByteBuffer;
 
     /**
-     * 用于存储index文件的
+     * 用于存储当前index文件的描述、统计信息，比如当前IndexFile存储的index数量
+     * 以及使用的hashSlot数量包括存放message的最小物理偏移量以及最大偏移量等等
      */
     private final IndexHeader indexHeader;
 
@@ -103,6 +116,13 @@ public class IndexFile {
         return this.mappedFile.destroy(intervalForcibly);
     }
 
+
+    /**
+     * 向IndexFile中添加消息索引
+     * @param key 消息的messageKey
+     * @param phyOffset 消息的物理偏移量
+     * @param storeTimestamp 消息存储的时间
+     */
     public boolean putKey(final String key, final long phyOffset, final long storeTimestamp) {
 
         //1. 判断该索引文件的索引数小于最大的索引数，如果>=最大索引数，IndexService就会尝试新建一个索引文件
@@ -125,6 +145,8 @@ public class IndexFile {
                 // false);
                 //这里存的是逻辑编号，上一个 entry 的位置，第一个为0
                 int slotValue = this.mappedByteBuffer.getInt(absSlotPos);
+
+
                 if (slotValue <= invalidIndex || slotValue > this.indexHeader.getIndexCount()) {
                     slotValue = invalidIndex;
                 }
@@ -142,7 +164,8 @@ public class IndexFile {
                     timeDiff = 0;
                 }
 
-                //物理偏移
+                //计算实际的索引写入的起始物理偏移量，这里需要说的是 在实际写入索引时是按照顺序的方式写入的
+                //所以通过IndexHeader中的IndexCount 可以计算出当前的索引需要写入的下一个位置在哪里
                 int absIndexPos =
                     IndexHeader.INDEX_HEADER_SIZE + // 头部40个字节
                             this.hashSlotNum * hashSlotSize  //默认的 hashSlotNum  为500W  ,（500W）* 4
@@ -178,7 +201,10 @@ public class IndexFile {
                     this.indexHeader.setBeginTimestamp(storeTimestamp);
                 }
 
+                //
                 this.indexHeader.incHashSlotCount();
+
+                //将index count 自增，表示又写入了一个索引
                 this.indexHeader.incIndexCount();
                 this.indexHeader.setEndPhyOffset(phyOffset);
                 this.indexHeader.setEndTimestamp(storeTimestamp);
@@ -230,6 +256,14 @@ public class IndexFile {
         return result;
     }
 
+    /**
+     *
+     * 根据messageKey 获取对应的消息在commit log中的物理偏移量
+     *
+     * @param phyOffsets 这里传入的list 是主要存放commit log中的物理偏移量
+     * @param key 消息key
+     * @param maxNum 返回的最大消息数
+     */
     public void selectPhyOffset(final List<Long> phyOffsets, final String key, final int maxNum,
         final long begin, final long end, boolean lock) {
         if (this.mappedFile.hold()) {
@@ -271,9 +305,14 @@ public class IndexFile {
 
                         //读取该 entry的 各个元素
                         int keyHashRead = this.mappedByteBuffer.getInt(absIndexPos);
+
+                        //获取消息的物理偏移量
                         long phyOffsetRead = this.mappedByteBuffer.getLong(absIndexPos + 4);
 
+                        //获取时差
                         long timeDiff = (long) this.mappedByteBuffer.getInt(absIndexPos + 4 + 8);
+
+                        //获取前一个entry的编号
                         int prevIndexRead = this.mappedByteBuffer.getInt(absIndexPos + 4 + 8 + 4);
 
                         if (timeDiff < 0) {

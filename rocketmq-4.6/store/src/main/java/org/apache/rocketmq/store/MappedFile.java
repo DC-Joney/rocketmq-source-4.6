@@ -75,7 +75,7 @@ public class MappedFile extends ReferenceResource {
     //文件名称
     private String fileName;
 
-    //当前文件其实的offset位置
+    //当前文件真实的offset位置，这里的fileFromOffset是针对与全局而言的
     private long fileFromOffset;
     private File file;
 
@@ -309,9 +309,11 @@ public class MappedFile extends ReferenceResource {
             if (this.hold()) {
 
                 //通过getReadPosition获取当前消息内容写入后的位置
+                //因为在写入完消息之后就已经更新了readPosition，所以现在的readPosition = writeOffset + writeBytes
                 int value = getReadPosition();
 
                 try {
+
                     //We only append data to fileChannel or mappedByteBuffer, never both.
                     if (writeBuffer != null || this.fileChannel.position() != 0) {
                         this.fileChannel.force(false);
@@ -559,9 +561,15 @@ public class MappedFile extends ReferenceResource {
         ByteBuffer byteBuffer = this.mappedByteBuffer.slice();
         int flush = 0;
         long time = System.currentTimeMillis();
+
+        //每次循环都会将i + MappedFile.OS_PAGE_SIZE
         for (int i = 0, j = 0; i < this.fileSize; i += MappedFile.OS_PAGE_SIZE, j++) {
+
+            //在每个page页的首置位写入一个字节
             byteBuffer.put(i, (byte) 0);
             // force flush when flush disk type is sync
+
+            //如果刷盘方式为同步刷盘，则将数据同步刷入到磁盘
             if (type == FlushDiskType.SYNC_FLUSH) {
                 if ((i / OS_PAGE_SIZE) - (flush / OS_PAGE_SIZE) >= pages) {
                     flush = i;
@@ -604,6 +612,7 @@ public class MappedFile extends ReferenceResource {
         log.info("mapped file warm-up done. mappedFile={}, costTime={}", this.getFileName(),
             System.currentTimeMillis() - beginTime);
 
+        //调用mlock方法将该内存锁住，防止被swap到swap分区
         this.mlock();
     }
 
@@ -636,11 +645,15 @@ public class MappedFile extends ReferenceResource {
         final long address = ((DirectBuffer) (this.mappedByteBuffer)).address();
         Pointer pointer = new Pointer(address);
         {
+
+            //锁住该内存
             int ret = LibC.INSTANCE.mlock(pointer, new NativeLong(this.fileSize));
             log.info("mlock {} {} {} ret = {} time consuming = {}", address, this.fileName, this.fileSize, ret, System.currentTimeMillis() - beginTime);
         }
 
         {
+
+            //调用 madvice函数，这里的参数是MADV_WILLNEED 作用是建议操作系统提前将这部分文件内容加载到物理内存，但是也可能不加载
             int ret = LibC.INSTANCE.madvise(pointer, new NativeLong(this.fileSize), LibC.MADV_WILLNEED);
             log.info("madvise {} {} {} ret = {} time consuming = {}", address, this.fileName, this.fileSize, ret, System.currentTimeMillis() - beginTime);
         }

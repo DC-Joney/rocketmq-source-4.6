@@ -446,7 +446,8 @@ public class MappedFileQueue {
     public boolean flush(final int flushLeastPages) {
         boolean result = true;
         // 这里首先根据  上一次刷盘完成后的offset : flushedWhere ，
-        // 通过findMappedFileByOffset方法，找到 CommitLog 文件的映射  MappedFile
+        // 通过findMappedFileByOffset方法，找到需要刷盘的MapppedFile文件，既当前commit log 文件
+        //
         MappedFile mappedFile = this.findMappedFileByOffset(this.flushedWhere, this.flushedWhere == 0);
         if (mappedFile != null) {
             long tmpTimeStamp = mappedFile.getStoreTimestamp();
@@ -454,7 +455,9 @@ public class MappedFileQueue {
             // 执行刷盘
             int offset = mappedFile.flush(flushLeastPages);
 
-            // 计算新的 位置
+            // 计算新的 位置，既当前文件的全局全局物理偏移量 + MappedFile当前刷盘位置的offset
+            // 举个例子：当前文件的名称为 1024，那么1024就是为全局物理偏移量 + MappedFile的刷盘位置假设为500
+            // 那么flushWhere = 1024 + 500 既全局的物理刷盘位置
             long where = mappedFile.getFileFromOffset() + offset;
             result = where == this.flushedWhere;
 
