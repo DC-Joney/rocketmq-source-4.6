@@ -26,14 +26,34 @@ import org.apache.rocketmq.common.filter.ExpressionType;
 import java.util.HashSet;
 import java.util.Set;
 
+/**
+ * 核心数据结构：订阅关系信息
+ * 包含了所有订阅相关的信息，包括订阅表达式、订阅 tag 等
+ */
 public class SubscriptionData implements Comparable<SubscriptionData> {
+
+    // 这里 * 代表订阅所有消息
     public final static String SUB_ALL = "*";
+
+    // 过滤模式
     private boolean classFilterMode = false;
+
+    // 订阅的 topic
     private String topic;
+
+    // 订阅的表达式
     private String subString;
+
+    // 订阅的 tag
     private Set<String> tagsSet = new HashSet<String>();
+
+    // 订阅的 code
     private Set<Integer> codeSet = new HashSet<Integer>();
+
+    // 订阅版本
     private long subVersion = System.currentTimeMillis();
+
+    // 表达式类型
     private String expressionType = ExpressionType.TAG;
 
     @JSONField(serialize = false)

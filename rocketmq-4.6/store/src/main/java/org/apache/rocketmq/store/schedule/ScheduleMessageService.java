@@ -38,14 +38,25 @@ public class ScheduleMessageService extends ConfigManager {
     private static final InternalLogger log = InternalLoggerFactory.getLogger(LoggerName.STORE_LOGGER_NAME);
 
     public static final String SCHEDULE_TOPIC = "SCHEDULE_TOPIC_XXXX";
+
+    /**
+     * 启动时第一次延迟的时间，默认为1000ms
+     */
     private static final long FIRST_DELAY_TIME = 1000L;
     private static final long DELAY_FOR_A_WHILE = 100L;
     private static final long DELAY_FOR_A_PERIOD = 10000L;  //10s
 
+    /**
+     * 存储 延时level对应的延迟时间
+     * key: 延迟的等级，value为延迟的时间
+     */
     private final ConcurrentMap<Integer /* level */, Long/* delay timeMillis */> delayLevelTable =
             new ConcurrentHashMap<Integer, Long>(32);
 
     //存储在 delayOffset.json 消费进度偏移
+    /**
+     * 存储每个延迟level以及消费的最新的offset位置
+     */
     private final ConcurrentMap<Integer /* level */, Long/* offset */> offsetTable =
             new ConcurrentHashMap<Integer, Long>(32);
     private final DefaultMessageStore defaultMessageStore;
@@ -243,8 +254,13 @@ public class ScheduleMessageService extends ConfigManager {
         return true;
     }
 
+    //用于执行特定延迟时间的延迟任务
     class DeliverDelayedMessageTimerTask extends TimerTask {
+
+        //延迟的level
         private final int delayLevel;
+
+        //延迟level对应的offset
         private final long offset; //offset 消费进度偏移
 
         public DeliverDelayedMessageTimerTask(int delayLevel, long offset) {
@@ -287,7 +303,7 @@ public class ScheduleMessageService extends ConfigManager {
 
         public void executeOnTimeup() {
 
-            //根据 SCHEDULE_TOPIC 和 延迟级别 找到对应的ConsumeQueue
+            //根据 SCHEDULE_TOPIC 和 延迟level 找到对应的ConsumeQueue
             ConsumeQueue cq =
                     ScheduleMessageService.this.defaultMessageStore.findConsumeQueue(SCHEDULE_TOPIC, delayLevel2QueueId(delayLevel));
 
@@ -295,7 +311,7 @@ public class ScheduleMessageService extends ConfigManager {
             long failScheduleOffset = offset;
 
             if (cq != null) {
-                //根据传入的  offset  的从ConsumeQueue中获取对应的  文件映射
+                //根据传入的  offset  的从ConsumeQueue中获取对应的 的MappedFile
                 SelectMappedBufferResult bufferCQ = cq.getIndexBuffer(this.offset);
                 if (bufferCQ != null) {
                     try {
@@ -322,19 +338,22 @@ public class ScheduleMessageService extends ConfigManager {
                                             tagsCode, offsetPy, sizePy);
 
                                     //从CommitLog中获取消息的存储时间
-
                                     long msgStoreTime = defaultMessageStore.getCommitLog().pickupStoreTimestamp(offsetPy, sizePy);
+                                    //计算消息的过期时间
                                     tagsCode = computeDeliverTimestamp(delayLevel, msgStoreTime);
                                 }
                             }
 
                             //计算当前时间和落盘时间的时间差，检查延迟时间是否到了
                             long now = System.currentTimeMillis();
+
+                            //获取消息的延迟时间
                             long deliverTimestamp = this.correctDeliverTimestamp(now, tagsCode);
 
                             //下一个消息单元的偏移量，既offset++
                             nextOffset = offset + (i / ConsumeQueue.CQ_STORE_UNIT_SIZE);
 
+                            //使用消息的延迟到期时间-现在的时间计算出消息到期的相对时间
                             long countdown = deliverTimestamp - now;
 
                             //消息的延迟时间到了

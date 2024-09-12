@@ -382,12 +382,16 @@ public abstract class NettyRemotingAbstract {
      */
     public void scanResponseTable() {
         final List<ResponseFuture> rfList = new LinkedList<ResponseFuture>();
+
+        //遍历所有的请求
         Iterator<Entry<Integer, ResponseFuture>> it = this.responseTable.entrySet().iterator();
         while (it.hasNext()) {
             Entry<Integer, ResponseFuture> next = it.next();
             ResponseFuture rep = next.getValue();
 
+            //如果请求的开启时间 + 超时时间 < 当前时间则代表超时了
             if ((rep.getBeginTimestamp() + rep.getTimeoutMillis() + 1000) <= System.currentTimeMillis()) {
+                //释放信号量
                 rep.release();
                 it.remove();
                 rfList.add(rep);
@@ -395,6 +399,7 @@ public abstract class NettyRemotingAbstract {
             }
         }
 
+        //执行超时请求的回调
         for (ResponseFuture rf : rfList) {
             try {
                 executeInvokeCallback(rf);
@@ -419,6 +424,7 @@ public abstract class NettyRemotingAbstract {
             final ResponseFuture responseFuture = new ResponseFuture(channel, opaque, timeoutMillis, null, null);
 
             //将ResponseFuture放入responseTable
+            //定时任务会定时扫描responseTable中超时的任务
             this.responseTable.put(opaque, responseFuture);
             final SocketAddress addr = channel.remoteAddress();
             //使用Netty的channel发送请求数据
@@ -466,7 +472,6 @@ public abstract class NettyRemotingAbstract {
 
         //opaque 对应于request ID
         //RemotingCommand会为每一个request产生一个request ID, 从0开始, 每次加1
-
         final int opaque = request.getOpaque();
 
         //尝试获得 semaphore 信号量，semaphore 默认为65535。

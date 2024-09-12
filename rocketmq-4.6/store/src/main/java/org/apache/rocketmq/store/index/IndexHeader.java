@@ -37,13 +37,34 @@ public class IndexHeader {
     private final ByteBuffer byteBuffer;
 
     /**
-     *
+     * 开始的时间
      */
     private AtomicLong beginTimestamp = new AtomicLong(0);
+
+
+    /**
+     * 结束的时间
+     */
     private AtomicLong endTimestamp = new AtomicLong(0);
+
+    /**
+     * 开始的物理偏移量
+     */
     private AtomicLong beginPhyOffset = new AtomicLong(0);
+
+    /**
+     * 结束的物理偏移量
+     */
     private AtomicLong endPhyOffset = new AtomicLong(0);
+
+    /**
+     * 实际的hash slot的数量
+     */
     private AtomicInteger hashSlotCount = new AtomicInteger(0);
+
+    /**
+     * 实际的索引数量
+     */
 
     private AtomicInteger indexCount = new AtomicInteger(1);
 

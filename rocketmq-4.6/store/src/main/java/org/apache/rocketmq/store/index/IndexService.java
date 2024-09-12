@@ -40,8 +40,20 @@ public class IndexService {
      */
     private static final int MAX_TRY_IDX_CREATE = 3;
     private final DefaultMessageStore defaultMessageStore;
+
+    /**
+     *  总的hash slot数量，默认为50_00000
+     */
     private final int hashSlotNum;
+
+    /**
+     *  总的索引数量，默认为2000W索引数据
+     */
     private final int indexNum;
+
+    /**
+     * 存储的路径
+     */
     private final String storePath;
     private final ArrayList<IndexFile> indexFileList = new ArrayList<IndexFile>();
     private final ReadWriteLock readWriteLock = new ReentrantReadWriteLock();
@@ -154,6 +166,15 @@ public class IndexService {
         }
     }
 
+    /**
+     * Query messages by given key.
+     *
+     * @param topic  topic of the message.
+     * @param key    message key.
+     * @param maxNum maximum number of the messages possible.
+     * @param begin  begin timestamp.
+     * @param end    end timestamp.
+     */
     public QueryOffsetResult queryOffset(String topic, String key, int maxNum, long begin, long end) {
         List<Long> phyOffsets = new ArrayList<Long>(maxNum);
 

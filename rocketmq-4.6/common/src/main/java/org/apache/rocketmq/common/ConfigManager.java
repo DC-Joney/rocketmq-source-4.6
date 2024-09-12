@@ -67,7 +67,7 @@ public abstract class ConfigManager {
 
     public abstract void decode(final String jsonString);
 
-    //对应
+    //将topic的元数据信息持久化到本地
     public synchronized void persist() {
         String jsonString = this.encode(true);
         if (jsonString != null) {

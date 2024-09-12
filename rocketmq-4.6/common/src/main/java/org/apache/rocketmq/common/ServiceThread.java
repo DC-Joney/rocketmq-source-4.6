@@ -27,15 +27,26 @@ import org.apache.rocketmq.logging.InternalLoggerFactory;
 public abstract class ServiceThread implements Runnable {
     private static final InternalLogger log = InternalLoggerFactory.getLogger(LoggerName.COMMON_LOGGER_NAME);
 
+    // 线程加入时间，90秒
     private static final long JOIN_TIME = 90 * 1000;
 
+    // 线程对象
     private Thread thread;
+
+    // 用于线程同步的CountDownLatch
     protected final CountDownLatch2 waitPoint = new CountDownLatch2(1);
+
+    // 用于线程间通知的原子布尔变量
     protected volatile AtomicBoolean hasNotified = new AtomicBoolean(false);
+
+    // 用于标识线程是否停止
     protected volatile boolean stopped = false;
+
+    // 标识线程是否为守护线程
     protected boolean isDaemon = false;
 
     //Make it able to restart the thread
+    // 用于标识线程是否已经启动，可以用于重启线程
     private final AtomicBoolean started = new AtomicBoolean(false);
 
     public ServiceThread() {
@@ -46,11 +57,15 @@ public abstract class ServiceThread implements Runnable {
 
     public void start() {
         log.info("Try to start service thread:{} started:{} lastThread:{}", getServiceName(), started.get(), thread);
+        // 只有当线程还未启动时，才执行下面的逻辑
         if (!started.compareAndSet(false, true)) {
             return;
         }
+        // 设置stopped为false，表示线程未停止
         stopped = false;
+        // 创建一个新的线程
         this.thread = new Thread(this, getServiceName());
+        // 设置线程是否为守护线程
         this.thread.setDaemon(isDaemon);
         this.thread.start();
     }

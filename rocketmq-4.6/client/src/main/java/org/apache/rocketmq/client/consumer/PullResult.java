@@ -22,8 +22,18 @@ import org.apache.rocketmq.common.message.MessageExt;
 public class PullResult {
     private final PullStatus pullStatus;
     private final long nextBeginOffset;
+
+    /**
+     * 拉取消息的最小offset
+     */
     private final long minOffset;
+
+    /**
+     * 拉取消息的最大offset
+     */
     private final long maxOffset;
+
+    //从messageStore拉取的所有的消息
     private List<MessageExt> msgFoundList;
 
     public PullResult(PullStatus pullStatus, long nextBeginOffset, long minOffset, long maxOffset,

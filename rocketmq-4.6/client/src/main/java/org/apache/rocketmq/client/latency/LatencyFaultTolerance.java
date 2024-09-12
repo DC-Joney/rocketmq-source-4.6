@@ -28,5 +28,6 @@ public interface LatencyFaultTolerance<T> {
     void remove(final T name);
 
     // 那么就从 faultItemTable 故障列表取出一个Broker即可
+    //按照延迟时间或者故障时间排序，找出最小的那个broker
     T pickOneAtLeast();
 }

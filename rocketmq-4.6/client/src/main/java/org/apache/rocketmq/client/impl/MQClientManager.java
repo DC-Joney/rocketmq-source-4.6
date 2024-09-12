@@ -51,6 +51,8 @@ public class MQClientManager {
     //3 内部消息producer defaultMQProducer
     //4 消费者状态管理服务 consumerStatsManager
 
+    //这里是为每一个客户端维护一个MQClientInstance实例，也就是说一个client instance下只存在一个MQClientInstance
+    //即使创建了多个Producer也都是放在了同一个MQClientInstance中
     public MQClientInstance getOrCreateMQClientInstance(final ClientConfig clientConfig, RPCHook rpcHook) {
         String clientId = clientConfig.buildMQClientId();
         MQClientInstance instance = this.factoryTable.get(clientId);

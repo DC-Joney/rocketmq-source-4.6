@@ -74,14 +74,28 @@ public class MQAdminImpl {
         this.timeoutMillis = timeoutMillis;
     }
 
+    /**
+     *
+     * @param key  Topic key 可有可无
+     * @param newTopic topic名称
+     * @param queueNum queue的数量
+     * @throws MQClientException
+     */
     public void createTopic(String key, String newTopic, int queueNum) throws MQClientException {
         createTopic(key, newTopic, queueNum, 0);
     }
 
     public void createTopic(String key, String newTopic, int queueNum, int topicSysFlag) throws MQClientException {
         try {
+
+
+            // 1、根据指定的 key 从 NameServer 中获取 Topic 路由数据信息
             TopicRouteData topicRouteData = this.mQClientFactory.getMQClientAPIImpl().getTopicRouteInfoFromNameServer(key, timeoutMillis);
+
+            // 2、从路由数据中解析出 Broker 相关数据，可以获取到你要分散的各个 Broker 分组以及机器数据
             List<BrokerData> brokerDataList = topicRouteData.getBrokerDatas();
+
+            // 如果不为空表示 broker 信息获取到了
             if (brokerDataList != null && !brokerDataList.isEmpty()) {
                 Collections.sort(brokerDataList);
 
@@ -90,15 +104,20 @@ public class MQAdminImpl {
 
                 StringBuilder orderTopicString = new StringBuilder();
 
+                // 3、遍历每个 Broker 分组
                 for (BrokerData brokerData : brokerDataList) {
                     String addr = brokerData.getBrokerAddrs().get(MixAll.MASTER_ID);
                     if (addr != null) {
+
+                        // 构建一个 Topic 配置
                         TopicConfig topicConfig = new TopicConfig(newTopic);
+                        // 一个 Topic 创建的时候在每个 broker 上要有几个 queues
                         topicConfig.setReadQueueNums(queueNum);
                         topicConfig.setWriteQueueNums(queueNum);
                         topicConfig.setTopicSysFlag(topicSysFlag);
 
                         boolean createOK = false;
+                        // 通过网络请求发送到 broker 分组的 master 机器里面去给该 Topic 创建多个 queues
                         for (int i = 0; i < 5; i++) {
                             try {
                                 this.mQClientFactory.getMQClientAPIImpl().createTopic(addr, key, topicConfig, timeoutMillis);
@@ -112,6 +131,7 @@ public class MQAdminImpl {
                             }
                         }
 
+                        // 如果成功后拼接数据
                         if (createOK) {
                             orderTopicString.append(brokerData.getBrokerName());
                             orderTopicString.append(":");

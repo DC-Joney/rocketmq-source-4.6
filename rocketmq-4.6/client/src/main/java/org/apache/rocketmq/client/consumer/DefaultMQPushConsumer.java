@@ -70,6 +70,7 @@ public class DefaultMQPushConsumer extends ClientConfig implements MQPushConsume
     /**
      * Internal implementation. Most of the functions herein are delegated to it.
      */
+    // DefaultMQPushConsumer 的默认实现，DefaultMQPushConsumer 中大部分功能都是对它的代理
     protected final transient DefaultMQPushConsumerImpl defaultMQPushConsumerImpl;
 
     /**
@@ -79,6 +80,7 @@ public class DefaultMQPushConsumer extends ClientConfig implements MQPushConsume
      *
      * See <a href="http://rocketmq.apache.org/docs/core-concept/">here</a> for further discussion.
      */
+    // 消费者所属组，相同角色的消费者需要具有完全相同的subscriptions和consumerGroup才能正确实现负载平衡，它需要全局唯一
     private String consumerGroup;
 
     /**

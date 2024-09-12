@@ -77,13 +77,14 @@ public class PullMessageService extends ServiceThread {
     }
 
     private void pullMessage(final PullRequest pullRequest) {
+        //根据组名获取对应的消费者 一个mqClientInstance里一个consumerGroup只有一个消费者对应
         final MQConsumerInner consumer = this.mQClientFactory.selectConsumer(pullRequest.getConsumerGroup());
         if (consumer != null) {
 
             // 强转: 推送模式消费者实现类
             DefaultMQPushConsumerImpl impl = (DefaultMQPushConsumerImpl) consumer;
 
-            // 拉取消息
+            //实际是根据组名获取对应的消费者来发起消息拉取
             impl.pullMessage(pullRequest);
         } else {
             log.warn("No matched consumer for the PullRequest {}, drop it", pullRequest);
@@ -96,6 +97,8 @@ public class PullMessageService extends ServiceThread {
 
         while (!this.isStopped()) {
             try {
+
+                // 链表实现的无界阻塞队列
                 PullRequest pullRequest = this.pullRequestQueue.take();
                 this.pullMessage(pullRequest);
             } catch (InterruptedException ignored) {

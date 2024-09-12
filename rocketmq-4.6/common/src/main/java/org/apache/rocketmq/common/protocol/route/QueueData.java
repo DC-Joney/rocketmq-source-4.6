@@ -21,13 +21,24 @@
 package org.apache.rocketmq.common.protocol.route;
 
 public class QueueData implements Comparable<QueueData> {
-    // broker 组的名称
+    // 每个 queue 都属于一个数据分区，一定是在一个 broker 组里，所以这里要指定 broker 名称，代表了当前的 broker 组
     private String brokerName;
     // 读队列数量
     private int readQueueNums;
     // 写队列数量
     private int writeQueueNums;
     //队列的读写权限
+    /**
+     * 在 broker 里，假如该 topic 有 4 个 write queue，4 个 read queue。随机的从 4 个 write queue里获取到一个 queue 来写入数据，在消费的时候，从 4 个 read queue 里随机的挑选一个，来读取数据。
+     * 这里举 2 个 例子，如下：
+     * （1）、4 个 write queue，2 个 read queue -> 会均匀的写入到 4 个 write queue 里去，读数据的时候仅仅会读里面的 2 个 queue 的数据
+     * （2）、4 个 write queue，8个 read queue -> 此时只会写入 4 个queue里，但是消费的时候随机从 8 个queue里消费的
+     * 所以区分读写队列作用是帮助我们对 topic 的 queues 进行扩容和缩容，8 个 write queue + 8 个 read queue
+     *  4 个 write queue -> 写入数据仅仅会进入这 4 个 write queue 里去
+     *  8 个 read queue，读取数据，有 4 个 queue 持续消费到最新的数据，另外 4 个 queue 不会写入新数据，但是会把他已有的数据全部消费完毕，最后 8 个 read queue -> 4 个 read queue
+     */
+
+    // 设置该 Topic 的读写模式 6：同时支持读写  4：禁写   2：禁读  一般情况设置为: 6
     private int perm;
     //队列的同步标志
     private int topicSynFlag;

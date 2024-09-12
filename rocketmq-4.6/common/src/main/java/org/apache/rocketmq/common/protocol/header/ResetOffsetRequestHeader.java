@@ -22,12 +22,28 @@ import org.apache.rocketmq.remoting.annotation.CFNotNull;
 import org.apache.rocketmq.remoting.exception.RemotingCommandException;
 
 public class ResetOffsetRequestHeader implements CommandCustomHeader {
+
+    /**
+     * topic M
+     */
     @CFNotNull
     private String topic;
+
+    /**
+     * 消费者组名称
+     */
     @CFNotNull
     private String group;
+
+    /**
+     * 用于查找offset的时间戳
+     */
     @CFNotNull
     private long timestamp;
+
+    /**
+     * 是否强制使用时间戳对应的offset位置
+     */
     @CFNotNull
     private boolean isForce;
 

@@ -18,11 +18,20 @@ package org.apache.rocketmq.client.impl.producer;
 
 import java.util.ArrayList;
 import java.util.List;
+
 import org.apache.rocketmq.client.common.ThreadLocalIndex;
 import org.apache.rocketmq.common.message.MessageQueue;
 import org.apache.rocketmq.common.protocol.route.QueueData;
 import org.apache.rocketmq.common.protocol.route.TopicRouteData;
 
+/**
+ * queue 的选择算法主要有两种：
+ * <p>
+ * 轮询算法：该算法保证了每个 Queue 中可以均匀的获取到消息。
+ * 最小投递延迟算法：该算法会统计每次消息投递的时间延迟，然后根据统计出的结果将消息投递到时间延迟最小的 Queue。如果延迟相同，
+ * 则采用轮询算法投递。该算法可以有效提升消息的投递性能。
+ * 默认使用的是轮询算法
+ */
 public class TopicPublishInfo {
     //是否是顺序主题，用于发送顺序消息
     private boolean orderTopic = false;
@@ -72,6 +81,12 @@ public class TopicPublishInfo {
         this.haveTopicRouterInfo = haveTopicRouterInfo;
     }
 
+    /**
+     * 选择队列
+     * 上一次发送成功则选择下一个队列，上一次发送失败会规避上次发送的 MessageQueue 所在的 Broker
+     *
+     * @param lastBrokerName 上次发送的 Broker 名称，如果为空表示上次发送成功
+     */
     //round-robin 负载均衡
     public MessageQueue selectOneMessageQueue(final String lastBrokerName) {
         //1 消息第一次发送，上一个失败的broker名字为null，直接round-round选择
@@ -121,7 +136,7 @@ public class TopicPublishInfo {
     @Override
     public String toString() {
         return "TopicPublishInfo [orderTopic=" + orderTopic + ", messageQueueList=" + messageQueueList
-            + ", sendWhichQueue=" + sendWhichQueue + ", haveTopicRouterInfo=" + haveTopicRouterInfo + "]";
+                + ", sendWhichQueue=" + sendWhichQueue + ", haveTopicRouterInfo=" + haveTopicRouterInfo + "]";
     }
 
     public TopicRouteData getTopicRouteData() {

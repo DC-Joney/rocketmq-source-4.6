@@ -51,26 +51,36 @@ import java.util.concurrent.atomic.AtomicLong;
 public class DefaultMessageStore implements MessageStore {
     private static final InternalLogger log = InternalLoggerFactory.getLogger(LoggerName.STORE_LOGGER_NAME);
 
+    // 消息存储组件配置
     private final MessageStoreConfig messageStoreConfig;
     // CommitLog
+    // CommitLog 磁盘数据存储结构，是存储实现类
     private final CommitLog commitLog;
 
     private final ConcurrentMap<String/* topic */, ConcurrentMap<Integer/* queueId */, ConsumeQueue>> consumeQueueTable;
 
+    // 消费队列 ConsumeQueue 刷磁盘线程
     private final FlushConsumeQueueService flushConsumeQueueService;
 
+    // 清理 CommitLog 组件
     private final CleanCommitLogService cleanCommitLogService;
 
+    // 清除 ConsumeQueue 文件组件
     private final CleanConsumeQueueService cleanConsumeQueueService;
 
+    // 索引服务
     private final IndexService indexService;
 
+    // 分配 MappedFile 映射文件服务组件（把磁盘文件里的数据映射到内存中来，高性能高并发实现的核心技术）
     private final AllocateMappedFileService allocateMappedFileService;
 
+    // 消息重新投递线程
     private final ReputMessageService reputMessageService;
 
+    // HA 高可用组件
     private final HAService haService;
 
+    //延迟消息服务
     private final ScheduleMessageService scheduleMessageService;
 
     private final StoreStatsService storeStatsService;
@@ -82,12 +92,15 @@ public class DefaultMessageStore implements MessageStore {
 
     private final ScheduledExecutorService scheduledExecutorService =
             Executors.newSingleThreadScheduledExecutor(new ThreadFactoryImpl("StoreScheduledThread"));
+
+    // Broker 统计器
     private final BrokerStatsManager brokerStatsManager;
     private final MessageArrivingListener messageArrivingListener;
     private final BrokerConfig brokerConfig;
 
     private volatile boolean shutdown = true;
 
+    // 消息存储刷盘检查点组件
     private StoreCheckpoint storeCheckpoint;
 
     private AtomicLong printTimes = new AtomicLong(0);
@@ -130,6 +143,7 @@ public class DefaultMessageStore implements MessageStore {
 
         this.transientStorePool = new TransientStorePool(messageStoreConfig);
 
+        //判断是否启用了临时存储池
         if (messageStoreConfig.isTransientStorePoolEnable()) {
             this.transientStorePool.init();
         }
@@ -172,6 +186,7 @@ public class DefaultMessageStore implements MessageStore {
             }
 
             // load Commit Log
+
             result = result && this.commitLog.load();
 
             // load Consume Queue

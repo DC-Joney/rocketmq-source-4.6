@@ -35,7 +35,9 @@ public interface TransactionalMessageService {
      * Delete prepare message when this message has been committed or rolled back.
      *
      * @param messageExt
+     *
      */
+    //删除预处理的消息
     boolean deletePrepareMessage(MessageExt messageExt);
 
     /**
@@ -44,6 +46,7 @@ public interface TransactionalMessageService {
      * @param requestHeader Commit message request header.
      * @return Operate result contains prepare message and relative error code.
      */
+    //提交预处理的消息
     OperationResult commitMessage(EndTransactionRequestHeader requestHeader);
 
     /**
@@ -52,6 +55,7 @@ public interface TransactionalMessageService {
      * @param requestHeader Prepare message request header.
      * @return Operate result contains prepare message and relative error code.
      */
+    //回滚该消息
     OperationResult rollbackMessage(EndTransactionRequestHeader requestHeader);
 
     /**

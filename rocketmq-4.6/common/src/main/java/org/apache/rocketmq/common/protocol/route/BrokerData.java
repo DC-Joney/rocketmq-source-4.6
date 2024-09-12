@@ -27,8 +27,16 @@ import org.apache.rocketmq.common.MixAll;
  * broker 元数据信息
  */
 public class BrokerData implements Comparable<BrokerData> {
+
+    // broker 集群拓扑架构，一个 broker 集群 -> 多个 broker 组（broker name）-> 多个 broker 机器（主从复制，高可用）
+    // 这一组 broker 是属于哪个 cluster
     private String cluster;
+
+    // broker name 代表了当前的 broker 组
     private String brokerName;
+
+
+    // 当前这一组 broker 里面包含了具体的几个 broker 机器，
     private HashMap<Long/* brokerId */, String/* broker address */> brokerAddrs;
 
     private final Random random = new Random();
@@ -50,9 +58,12 @@ public class BrokerData implements Comparable<BrokerData> {
      * @return Broker address.
      */
     public String selectBrokerAddr() {
+        // 默认就把一组 broker 里的 id = 0 的那个 broker 作为 master
         String addr = this.brokerAddrs.get(MixAll.MASTER_ID);
 
         if (addr == null) {
+
+            // 如果 master 没找到，就随机选择一个 broker
             List<String> addrs = new ArrayList<String>(brokerAddrs.values());
             return addrs.get(random.nextInt(addrs.size()));
         }

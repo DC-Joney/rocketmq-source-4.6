@@ -184,23 +184,38 @@ public class MQClientAPIImpl {
         final ClientRemotingProcessor clientRemotingProcessor,
         RPCHook rpcHook, final ClientConfig clientConfig) {
         this.clientConfig = clientConfig;
+
+        // 初始化地址组件
         topAddressing = new TopAddressing(MixAll.getWSAddr(), clientConfig.getUnitName());
+
+        // 初始化 netty 远程通信客户端组件
         this.remotingClient = new NettyRemotingClient(nettyClientConfig, null);
         this.clientRemotingProcessor = clientRemotingProcessor;
 
+
+
         this.remotingClient.registerRPCHook(rpcHook);
+
+        // 远程通信客户端注册处理器
+        // (1) CHECK_TRANSACTION_STATE 事务回查
         this.remotingClient.registerProcessor(RequestCode.CHECK_TRANSACTION_STATE, this.clientRemotingProcessor, null);
 
+        // (2) NOTIFY_CONSUMER_IDS_CHANGED 通知消费者变化
         this.remotingClient.registerProcessor(RequestCode.NOTIFY_CONSUMER_IDS_CHANGED, this.clientRemotingProcessor, null);
 
+        // (3) 重置消费端offset
         this.remotingClient.registerProcessor(RequestCode.RESET_CONSUMER_CLIENT_OFFSET, this.clientRemotingProcessor, null);
 
+        // (4) 获取消费端状态
         this.remotingClient.registerProcessor(RequestCode.GET_CONSUMER_STATUS_FROM_CLIENT, this.clientRemotingProcessor, null);
 
+        // (5) 获取消费端运行信息
         this.remotingClient.registerProcessor(RequestCode.GET_CONSUMER_RUNNING_INFO, this.clientRemotingProcessor, null);
 
+        // (6) 消费消息
         this.remotingClient.registerProcessor(RequestCode.CONSUME_MESSAGE_DIRECTLY, this.clientRemotingProcessor, null);
 
+        // (7) 推送已 ready 消息到客户端
         this.remotingClient.registerProcessor(RequestCode.PUSH_REPLY_MESSAGE_TO_CLIENT, this.clientRemotingProcessor, null);
     }
 
@@ -269,16 +284,26 @@ public class MQClientAPIImpl {
     public void createTopic(final String addr, final String defaultTopic, final TopicConfig topicConfig,
         final long timeoutMillis)
         throws RemotingException, MQBrokerException, InterruptedException, MQClientException {
+        // 构建请求头
         CreateTopicRequestHeader requestHeader = new CreateTopicRequestHeader();
+        // 设置 topic 名称
         requestHeader.setTopic(topicConfig.getTopicName());
+        // 设置默认 topic
         requestHeader.setDefaultTopic(defaultTopic);
+        // 设置读队列数
         requestHeader.setReadQueueNums(topicConfig.getReadQueueNums());
+        // 设置写队列数
         requestHeader.setWriteQueueNums(topicConfig.getWriteQueueNums());
+        // 设置 Topic 的读写模式 6：同时支持读写  4：禁写   2：禁读  一般情况设置为: 6
         requestHeader.setPerm(topicConfig.getPerm());
+        // 设置 Topic 过滤类型
         requestHeader.setTopicFilterType(topicConfig.getTopicFilterType().name());
+        // 设置 Topic 系统表示
         requestHeader.setTopicSysFlag(topicConfig.getTopicSysFlag());
+
         requestHeader.setOrder(topicConfig.isOrder());
 
+        // 构建请求
         RemotingCommand request = RemotingCommand.createRequestCommand(RequestCode.UPDATE_AND_CREATE_TOPIC, requestHeader);
 
         RemotingCommand response = this.remotingClient.invokeSync(MixAll.brokerVIPChannel(this.clientConfig.isVipChannelEnabled(), addr),
@@ -1364,6 +1389,7 @@ public class MQClientAPIImpl {
     public TopicRouteData getTopicRouteInfoFromNameServer(final String topic, final long timeoutMillis,
         boolean allowTopicNotExist) throws MQClientException, InterruptedException, RemotingTimeoutException, RemotingSendRequestException, RemotingConnectException {
         GetRouteInfoRequestHeader requestHeader = new GetRouteInfoRequestHeader();
+        // 设置请求头 Topic
         requestHeader.setTopic(topic);
 
         RemotingCommand request = RemotingCommand.createRequestCommand(RequestCode.GET_ROUTEINTO_BY_TOPIC, requestHeader);

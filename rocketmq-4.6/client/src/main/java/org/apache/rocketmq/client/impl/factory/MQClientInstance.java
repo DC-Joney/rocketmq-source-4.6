@@ -85,24 +85,52 @@ import org.apache.rocketmq.remoting.exception.RemotingException;
 import org.apache.rocketmq.remoting.netty.NettyClientConfig;
 import org.apache.rocketmq.remoting.protocol.RemotingCommand;
 
+
+//这里是为每一个客户端维护一个MQClientInstance实例，也就是说一个client instance下只存在一个MQClientInstance
+//即使创建了多个Producer也都是放在了同一个MQClientInstance中
 public class MQClientInstance {
     private final static long LOCK_TIMEOUT_MILLIS = 3000;
     private final InternalLogger log = ClientLogger.getLog();
+
+    // 客户端配置组件（对应生产者 DefaultMQProducer、消费者 DefaultMQPushConsumer）
     private final ClientConfig clientConfig;
     private final int instanceIndex;
+
+    // 客户端id
     private final String clientId;
+
+    //启动的时间
     private final long bootTimestamp = System.currentTimeMillis();
+
+    // 生产者表，producer 启动时创建一个新的 MQClientInstance 实例对象，将生产者信息注册到这里。生产者实例对象中消费者信息是空
     private final ConcurrentMap<String/* group */, MQProducerInner> producerTable = new ConcurrentHashMap<String, MQProducerInner>();
+
+    // 消费者表，consumer 启动时创建一个新的 MQClientInstance 实例对象，将消费者信息注册到这里。消费者实例对象中生产者信息是空
     private final ConcurrentMap<String/* group */, MQConsumerInner> consumerTable = new ConcurrentHashMap<String, MQConsumerInner>();
+
+
     private final ConcurrentMap<String/* group */, MQAdminExtInner> adminExtTable = new ConcurrentHashMap<String, MQAdminExtInner>();
+
+    // netty客户端配置组件
     private final NettyClientConfig nettyClientConfig;
+
+    // 客户端通信api实现组件
     private final MQClientAPIImpl mQClientAPIImpl;
+
+
+    // admin管理客户端网络通信组件
     private final MQAdminImpl mQAdminImpl;
+
+    // topic 路由信息，producer 和 consumer 都会使用
     private final ConcurrentMap<String/* Topic */, TopicRouteData> topicRouteTable = new ConcurrentHashMap<String, TopicRouteData>();
     private final Lock lockNamesrv = new ReentrantLock();
     private final Lock lockHeartbeat = new ReentrantLock();
+
+    // broker 信息，producer 和 consumer 都会用到
     private final ConcurrentMap<String/* Broker Name */, HashMap<Long/* brokerId */, String/* address */>> brokerAddrTable =
         new ConcurrentHashMap<String, HashMap<Long, String>>();
+
+    // broker组->brokerids映射表
     private final ConcurrentMap<String/* Broker Name */, HashMap<String/* address */, Integer>> brokerVersionTable =
         new ConcurrentHashMap<String, HashMap<String, Integer>>();
     private final ScheduledExecutorService scheduledExecutorService = Executors.newSingleThreadScheduledExecutor(new ThreadFactory() {
@@ -112,11 +140,22 @@ public class MQClientInstance {
         }
     });
     private final ClientRemotingProcessor clientRemotingProcessor;
+
+    // consumer拉取消息服务线程
     private final PullMessageService pullMessageService;
+
+    // consumer重平衡服务线程
     private final RebalanceService rebalanceService;
+
+    // 所属消息生产者组件
     private final DefaultMQProducer defaultMQProducer;
+
+
+    // consumer指标统计管理组件
     private final ConsumerStatsManager consumerStatsManager;
     private final AtomicLong sendHeartbeatTimesTotal = new AtomicLong(0);
+
+    // 组件服务状态
     private ServiceState serviceState = ServiceState.CREATE_JUST;
     private DatagramSocket datagramSocket;
     private Random random = new Random();
@@ -131,7 +170,11 @@ public class MQClientInstance {
         this.nettyClientConfig = new NettyClientConfig();
         this.nettyClientConfig.setClientCallbackExecutorThreads(clientConfig.getClientCallbackExecutorThreads());
         this.nettyClientConfig.setUseTLS(clientConfig.isUseTLS());
+
+        // 客户端处理器,比如在集群消费模式下，有新的消费者加入，则通知消费者客户端重平衡,主要是给消费者用的，这里可以忽略
         this.clientRemotingProcessor = new ClientRemotingProcessor(this);
+
+        // 初始化远程客户端 NRC(Netty Remoting Client)，注册功能与 clientRemotingProcessor 的映射关系
         this.mQClientAPIImpl = new MQClientAPIImpl(this.nettyClientConfig, this.clientRemotingProcessor, rpcHook, clientConfig);
 
         if (this.clientConfig.getNamesrvAddr() != null) {
@@ -257,15 +300,21 @@ public class MQClientInstance {
                     if (null == this.clientConfig.getNamesrvAddr()) {
                         this.mQClientAPIImpl.fetchNameServerAddr();
                     }
+
+                    // 启动用于和 broker 通信的 netty 客户端
                     // Start request-response channel
                     this.mQClientAPIImpl.start();
                     // Start various schedule tasks
+                    // 启动定时任务，包括心跳，拉取topic路由信息，更新broker信息，清理过期消息等
                     this.startScheduledTask();
+                    // 开启拉取消息服务
                     // Start pull service
                     this.pullMessageService.start();
+                    // 开启负载均衡服务
                     // Start rebalance service
                     this.rebalanceService.start();
                     // Start push service
+                    // 当消费失败的时候，需要把消息发回去
                     this.defaultMQProducer.getDefaultMQProducerImpl().start(false);
                     log.info("the client factory [{}] start OK", this.clientId);
                     this.serviceState = ServiceState.RUNNING;
@@ -279,12 +328,15 @@ public class MQClientInstance {
     }
 
     private void startScheduledTask() {
+
+        //拉取NameSrv地址
         if (null == this.clientConfig.getNamesrvAddr()) {
             this.scheduledExecutorService.scheduleAtFixedRate(new Runnable() {
 
                 @Override
                 public void run() {
                     try {
+
                         MQClientInstance.this.mQClientAPIImpl.fetchNameServerAddr();
                     } catch (Exception e) {
                         log.error("ScheduledTask fetchNameServerAddr exception", e);
@@ -306,6 +358,8 @@ public class MQClientInstance {
             }
         }, 10, this.clientConfig.getPollNameServerInterval(), TimeUnit.MILLISECONDS);
 
+
+        //每30s上报心跳给所有的broker
         this.scheduledExecutorService.scheduleAtFixedRate(new Runnable() {
 
             @Override
@@ -319,6 +373,7 @@ public class MQClientInstance {
             }
         }, 1000, this.clientConfig.getHeartbeatBrokerInterval(), TimeUnit.MILLISECONDS);
 
+        // 5 秒持久化消费进度
         this.scheduledExecutorService.scheduleAtFixedRate(new Runnable() {
 
             @Override
@@ -331,6 +386,7 @@ public class MQClientInstance {
             }
         }, 1000 * 10, this.clientConfig.getPersistConsumerOffsetInterval(), TimeUnit.MILLISECONDS);
 
+        // 动态调整消费者的线程池大小 但是从底层代码来看并没有实现
         this.scheduledExecutorService.scheduleAtFixedRate(new Runnable() {
 
             @Override
@@ -379,12 +435,14 @@ public class MQClientInstance {
                 Entry<String, MQProducerInner> entry = it.next();
                 MQProducerInner impl = entry.getValue();
                 if (impl != null) {
+                    //获取每一个ProducerImpl关联的TopicRouteTable
                     Set<String> lst = impl.getPublishTopicList();
                     topicList.addAll(lst);
                 }
             }
         }
 
+        //遍历所有的topic从NameSrv拉取信息
         for (String topic : topicList) {
 
             //根据topic从namesrv获取元数据信息
@@ -635,6 +693,11 @@ public class MQClientInstance {
         }
     }
 
+    /**
+     * 更新topic的路由信息，包括topic对应的队列以及broker地址
+     * @param topic 需要被更新的topic
+     * @param isDefault 是否使用默认topic
+     */
     public boolean updateTopicRouteInfoFromNameServer(final String topic, boolean isDefault,
         DefaultMQProducer defaultMQProducer) {
         try {
@@ -670,6 +733,8 @@ public class MQClientInstance {
 
                             TopicRouteData cloneTopicRouteData = topicRouteData.cloneTopicRouteData();
 
+
+                            //将topic对应的broker地址添加到brokerAddrTable中，用于向broker上报心跳信息
                             for (BrokerData bd : topicRouteData.getBrokerDatas()) {
                                 this.brokerAddrTable.put(bd.getBrokerName(), bd.getBrokerAddrs());
                             }
@@ -686,6 +751,7 @@ public class MQClientInstance {
                                     Entry<String, MQProducerInner> entry = it.next();
                                     MQProducerInner impl = entry.getValue();
                                     if (impl != null) {
+                                        //更新producer中的topic对应的信息
                                         impl.updateTopicPublishInfo(topic, publishInfo);
                                     }
                                 }

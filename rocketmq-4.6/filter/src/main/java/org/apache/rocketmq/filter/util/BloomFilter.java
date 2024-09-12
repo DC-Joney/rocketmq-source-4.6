@@ -85,6 +85,8 @@ public class BloomFilter {
      * <p>
      * See "Less Hashing, Same Performance: Building a Better Bloom Filter" by Adam Kirsch and Michael
      * Mitzenmacher.
+     *
+     * 返回 每次hash后hash对应的bitmap中的index位置
      * </p>
      */
     public int[] calcBitPositions(String str) {

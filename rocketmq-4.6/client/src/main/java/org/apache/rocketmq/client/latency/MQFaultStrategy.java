@@ -89,6 +89,7 @@ public class MQFaultStrategy {
                 // 如果所有的队列都是隔离中的话
                 // 那么就从 faultItemTable 隔离列表取出一个Broker即可
                 // 作为  次优的 broker
+                // 找出延时时间最小的broker，按照故障到期的时间进行排序
                 final String notBestBroker = latencyFaultTolerance.pickOneAtLeast();
                 // 获取这个broker的可写队列数，如果该Broker没有可写的队列，则返回-1
                 int writeQueueNums = tpInfo.getQueueIdByBroker(notBestBroker);
@@ -130,6 +131,7 @@ public class MQFaultStrategy {
         //开启延迟隔离容错
         if (this.sendLatencyFaultEnable) {
             //计算出故障时间，隔离默认是30秒，不隔离则根据性能来选择故障时间
+            //如果是因为发送异常引起的则为30s，否则隔离时间为延迟时间
             long duration = computeNotAvailableDuration(isolation ? 30000 : currentLatency);
             this.latencyFaultTolerance.updateFaultItem(brokerName, currentLatency, duration);
         }

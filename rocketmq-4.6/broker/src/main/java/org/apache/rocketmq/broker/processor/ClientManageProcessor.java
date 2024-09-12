@@ -81,24 +81,33 @@ public class ClientManageProcessor implements NettyRequestProcessor {
             request.getVersion()
         );
 
+        //如果是consumer client的心跳，那么将其注册到consumer manager中
         for (ConsumerData data : heartbeatData.getConsumerDataSet()) {
+
+            //查找消费者组订阅的配置信息
             SubscriptionGroupConfig subscriptionGroupConfig =
                 this.brokerController.getSubscriptionGroupManager().findSubscriptionGroupConfig(
                     data.getGroupName());
             boolean isNotifyConsumerIdsChangedEnable = true;
             if (null != subscriptionGroupConfig) {
+                //当消费者组发生变更时是否通知消费者组中的其他成员
                 isNotifyConsumerIdsChangedEnable = subscriptionGroupConfig.isNotifyConsumerIdsChangedEnable();
                 int topicSysFlag = 0;
                 if (data.isUnitMode()) {
                     topicSysFlag = TopicSysFlag.buildSysFlag(false, true);
                 }
+
+                //创建一个消费者组重试的topic
                 String newTopic = MixAll.getRetryTopic(data.getGroupName());
+
+                //创建topic的元数据信息
                 this.brokerController.getTopicConfigManager().createTopicInSendMessageBackMethod(
                     newTopic,
                     subscriptionGroupConfig.getRetryQueueNums(),
                     PermName.PERM_WRITE | PermName.PERM_READ, topicSysFlag);
             }
 
+            //将其注册到ConsumerManager中
             boolean changed = this.brokerController.getConsumerManager().registerConsumer(
                 data.getGroupName(),
                 clientChannelInfo,
@@ -117,6 +126,7 @@ public class ClientManageProcessor implements NettyRequestProcessor {
             }
         }
 
+        //如果是producer client的心跳，那么就将其注册到producer manager中
         for (ProducerData data : heartbeatData.getProducerDataSet()) {
             this.brokerController.getProducerManager().registerProducer(data.getGroupName(),
                 clientChannelInfo);
@@ -126,6 +136,11 @@ public class ClientManageProcessor implements NettyRequestProcessor {
         return response;
     }
 
+    /**
+     * 注销生产者长连接信息
+     * @param group
+     * @param clientChannelInfo
+     */
     public RemotingCommand unregisterClient(ChannelHandlerContext ctx, RemotingCommand request)
         throws RemotingCommandException {
         final RemotingCommand response =

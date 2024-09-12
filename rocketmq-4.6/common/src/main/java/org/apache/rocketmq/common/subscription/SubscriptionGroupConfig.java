@@ -21,21 +21,32 @@ import org.apache.rocketmq.common.MixAll;
 
 public class SubscriptionGroupConfig {
 
+    // 消费组名称
     private String groupName;
+    // 是否开启消费
 
     private boolean consumeEnable = true;
+
+    // 是否允许消费最早消息
     private boolean consumeFromMinEnable = true;
+
+    // 是否允许广播消费
 
     private boolean consumeBroadcastEnable = true;
 
+    // 重试队列数
     private int retryQueueNums = 1;
 
+    // 重试最大次数
     private int retryMaxTimes = 16;
 
+    // BrokerId
     private long brokerId = MixAll.MASTER_ID;
 
+    // 当产生慢消费时，选择第几个broker
     private long whichBrokerWhenConsumeSlowly = 1;
 
+    // 是否通知消费者 ids 变更
     private boolean notifyConsumerIdsChangedEnable = true;
 
     public String getGroupName() {

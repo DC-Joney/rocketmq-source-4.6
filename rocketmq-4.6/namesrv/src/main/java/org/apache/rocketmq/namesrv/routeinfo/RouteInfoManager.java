@@ -40,6 +40,9 @@ import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.locks.ReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
+/**
+ * RouteInfoManager 主要用来管理所有的 Broker、cluster集群、TtopicQueue 主题队列以及 broker 存活的信息
+ */
 public class RouteInfoManager {
 
 
@@ -62,6 +65,10 @@ public class RouteInfoManager {
     //活跃Broker映射表，NameServer每次收到心跳包是会替换该信息
     private final HashMap<String/* brokerAddr */, BrokerLiveInfo> brokerLiveTable;
 
+    // Broker 上的 FilterServer 列表，用于类模式的消息过滤。
+    // consumer 拉取数据是通过 filterServer 拉取，consumer 向 Broker 注册。
+
+    // key 是 BrokerAddrInfo 地址对象， value 是记录了 filterServer 过滤器服务器地址的 List 集合。
     private final HashMap<String/* brokerAddr */, List<String>/* Filter Server */> filterServerTable;
 
     public RouteInfoManager() {
@@ -108,6 +115,20 @@ public class RouteInfoManager {
         return topicList.encode();
     }
 
+
+    /**
+     * 处理 Broker 心跳信息，存到本地路由表
+     * 如果是 SLAVE，则返回 MASTER 的 HA 地址
+     *
+     * @param clusterName broker 所属的集群名称
+     * @param brokerAddr broker 机器地址
+     * @param brokerName broker 所属的集群名称
+     * @param brokerId brokerId
+     * @param haServerAddr 跟这个broker互为HA高可用的一个机器地址
+     * @param topicConfigWrapper broker 上面的 Topic 信息
+     * @param filterServerList broker 机器上的filter Server 列表
+     * @param channel netty channel 网络长连接
+     */
     public RegisterBrokerResult registerBroker(
             final String clusterName,
             final String brokerAddr,
@@ -121,10 +142,12 @@ public class RouteInfoManager {
         try {
             try {
 
-                //加锁: 加上xie锁
+                // 1、路由注册需要加写锁，防止并发修改 RouteInfoManager 中的路由表信息
+                // RouteInfoManager 管理元数据内存结构读的并发一般是大于写的并发的，所以通过读写锁来保证并发安全性的前提下，还可以提升读的性能
                 this.lock.writeLock().lockInterruptibly();
 
-                //维护 clusterName 下面的  brokerNames 集合
+                // 2、更新集群信息表。根据 Broker 所属的集群名称 clusterName，
+                // 从 clusterAddrTable 中获取 BrokerName 的集合，然后把 BrokerName 添加进去。
                 Set<String> brokerNames = this.clusterAddrTable.get(clusterName);
                 if (null == brokerNames) {
                     brokerNames = new HashSet<String>();
@@ -136,31 +159,40 @@ public class RouteInfoManager {
 
                 boolean registerFirst = false;
 
+                // 3、维护 brokerAddrTable，根据 brokerName 尝试从 brokerAddrTable 中获取 brokerData 信息
                 //添加 broker 元数据，创建一个  BrokerData 结构
                 BrokerData brokerData = this.brokerAddrTable.get(brokerName);
                 if (null == brokerData) {
+                    // 设置 registerFirst 设置为 true，表示该 Broker 首次注册
                     registerFirst = true;
+                    // 创建 BrokerData，并且维护到 brokerAddrTable 中
                     brokerData = new BrokerData(clusterName, brokerName, new HashMap<Long, String>());
                     this.brokerAddrTable.put(brokerName, brokerData);
                 }
+
+                // 4、获取 broker 分组信息
                 Map<Long, String> brokerAddrsMap = brokerData.getBrokerAddrs();
                 //Switch slave to master: first remove <1, IP:PORT> in namesrv, then add <0, IP:PORT>
                 //The same IP:PORT must only have one record in brokerAddrTable
+                // 对 broker 地址进行迭代遍历，这个地方是处理异常的数据。比如主从切换，之前是主节点，现在是从节点。
                 Iterator<Entry<Long, String>> it = brokerAddrsMap.entrySet().iterator();
                 while (it.hasNext()) {
                     Entry<Long, String> item = it.next();
+                    // 考虑到可能出现 master 挂了，slave 变成 master 的情况，这时候 brokerId 会变成0，这时候需要把老的 brokerAddr 给删除
                     if (null != brokerAddr && brokerAddr.equals(item.getValue()) && brokerId != item.getKey()) {
                         it.remove();
                     }
                 }
 
                 //绑定Broker的ID和地址
+                // 5、维护 BrokerData 的地址数据，并且获取 oldAddr，然后校验一下是否是第一次注册。
+                // 把本次要注册的 broker 地址放入到 broker 列表中
                 String oldAddr = brokerData.getBrokerAddrs().put(brokerId, brokerAddr);
 
                 //是否第一次
                 registerFirst = registerFirst || (null == oldAddr);
 
-                //维护topicQueueTable 分区信息
+                // 6、更新 Topic 信息表。只有主节点 Topic 配置信息发生变化或第一次注册才会更新
                 if (null != topicConfigWrapper
                         && MixAll.MASTER_ID == brokerId) {
                     if (this.isBrokerTopicConfigChanged(brokerAddr, topicConfigWrapper.getDataVersion())
@@ -175,10 +207,10 @@ public class RouteInfoManager {
                     }
                 }
 
+                // 7、更新 Broker 保活状态信息，BrokeLiveInfo 是执行路由删除的重要依据，其中包含最后更新时间
                 //维护 活跃Broker映射表
 
                 //BrokerLiveInfo其最新的时间lastUpdateTimestamp为当前时间
-
                 //scanNotActiveBroker方法用到这个时间
                 BrokerLiveInfo prevBrokerLiveInfo = this.brokerLiveTable.put(brokerAddr,
                         new BrokerLiveInfo(
@@ -190,6 +222,7 @@ public class RouteInfoManager {
                     log.info("new broker registered, {} HAServer: {}", brokerAddr, haServerAddr);
                 }
 
+                // 更新 Broker 的 filterServer 地址列表，一个 Broker 可能有多个 Filter Server
                 if (filterServerList != null) {
                     if (filterServerList.isEmpty()) {
                         this.filterServerTable.remove(brokerAddr);
@@ -198,6 +231,7 @@ public class RouteInfoManager {
                     }
                 }
 
+                // 8、如果注册过来的此Broker为从节点，则需要查找Broker Master的节点信息并返回，更新对应 master HaAddr 属性
                 if (MixAll.MASTER_ID != brokerId) {
                     String masterAddr = brokerData.getBrokerAddrs().get(MixAll.MASTER_ID);
                     if (masterAddr != null) {
@@ -466,7 +500,6 @@ public class RouteInfoManager {
 
     //NameServer中有一个定时任务，**每隔10秒扫描一下Broker表**，
     // 如果某个Broker的心跳包最新时间戳距离当前时间超多120秒，也会判定Broker失效并将其移除。
-
     public void scanNotActiveBroker() {
         Iterator<Entry<String, BrokerLiveInfo>> it = this.brokerLiveTable.entrySet().iterator();
         while (it.hasNext()) {
@@ -483,6 +516,7 @@ public class RouteInfoManager {
                 log.warn("The broker channel expired, {} {}ms", next.getKey(), BROKER_CHANNEL_EXPIRED_TIME);
 
                 //维护路由表
+                // 执行路由剔除操作
                 this.onChannelDestroy(next.getKey(), next.getValue().getChannel());
             }
         }
@@ -812,10 +846,30 @@ public class RouteInfoManager {
     }
 }
 
+/**
+ * Broker 会定时往 NameServer 进行心跳的发送，更新这个 BrokerLiveInfo 这个数据结构，维护心跳信息。
+ * NameServer 心跳检测也是检测的这个信息。
+ */
 class BrokerLiveInfo {
+
+    /**
+     * broker最后一次向NameSrv上报心跳的时间，用来检查broker是否过期或者不在线
+     */
     private long lastUpdateTimestamp;
+
+    /**
+     * broker的 topic配置的数据版本，这个用来在broker注册或者重新注册时，比较和更新NameServer的topic信息
+     */
     private DataVersion dataVersion;
+
+    /**
+     * broker与NameSrv之间的通道，这个用来进行通信和发送请求或者相应
+     */
     private Channel channel;
+
+    /**
+     * broker的高可用的服务器的地址，这个用来让其他的broker或者消费者连接到broker进行数据复制和消费
+     */
     private String haServerAddr;
 
     public BrokerLiveInfo(long lastUpdateTimestamp, DataVersion dataVersion, Channel channel,

@@ -111,6 +111,13 @@ public class BrokerOuterAPI {
         this.remotingClient.updateNameServerAddressList(lst);
     }
 
+    /**
+     * 向nameServer注册当前的broker信息
+     * @param clusterName 集群名称
+     * @param brokerAddr broker地址
+     * @param brokerName broker名称
+     * @param brokerId brokerId
+     */
     public List<RegisterBrokerResult> registerBrokerAll(
         final String clusterName,
         final String brokerAddr,
@@ -131,22 +138,30 @@ public class BrokerOuterAPI {
         //准备：遍历 nameServerAddressList 列表
         if (nameServerAddressList != null && nameServerAddressList.size() > 0) {
 
-            //封装请求头
+            // 为所有心跳请求构造统一的请求头，主要封装 broker 相关信息
             final RegisterBrokerRequestHeader requestHeader = new RegisterBrokerRequestHeader();
             requestHeader.setBrokerAddr(brokerAddr);
             requestHeader.setBrokerId(brokerId);
             requestHeader.setBrokerName(brokerName);
             requestHeader.setClusterName(clusterName);
+
+            // 主节点地址，初次请求时为空，从节点向 NameServer 注册后更新
             requestHeader.setHaServerAddr(haServerAddr);
             requestHeader.setCompressed(compressed);
 
-            //封装请求体 RegisterBrokerBody
+            // 构造统一的请求体，包括 topic 和 filterServerList 相关信息
             RegisterBrokerBody requestBody = new RegisterBrokerBody();
+
+            // Topic 配置，存储 Broker 启动时的一些默认 Topic
             requestBody.setTopicConfigSerializeWrapper(topicConfigWrapper);
+
+            // 消息过滤服务器列表
             requestBody.setFilterServerList(filterServerList);
             final byte[] body = requestBody.encode(compressed);
             final int bodyCrc32 = UtilAll.crc32(body);
             requestHeader.setBodyCrc32(bodyCrc32);
+
+            // 开启多线程到每个 NameServer 进行注册
             final CountDownLatch countDownLatch = new CountDownLatch(nameServerAddressList.size());
 
             //遍历 nameServerAddressList 列表
@@ -191,12 +206,15 @@ public class BrokerOuterAPI {
     ) throws RemotingCommandException, MQBrokerException, RemotingConnectException, RemotingSendRequestException, RemotingTimeoutException,
         InterruptedException {
 
-        //创建报文 POJO对象，这里叫做远程命令
+        // 创建请求指令，需要注意 RequestCode.REGISTER_BROKER，NameServer 端的网络处理器会根据requestCode 进行相应的业务处理
         RemotingCommand request = RemotingCommand.createRequestCommand(RequestCode.REGISTER_BROKER, requestHeader);
         request.setBody(body);
 
+        // 基于 netty 框架进行网络传输
         if (oneway) {
             try {
+
+                // 如果是单向调用，没有返回值，不返回 NameServer 返回结果
                 this.remotingClient.invokeOneway(namesrvAddr, request, timeoutMills);
             } catch (RemotingTooMuchRequestException e) {
                 // Ignore
@@ -205,10 +223,12 @@ public class BrokerOuterAPI {
         }
 
 
+        // 异步调用向 NameServer 发起注册，获取 NameServer 的返回信息
         RemotingCommand response = this.remotingClient.invokeSync(namesrvAddr, request, timeoutMills);
         assert response != null;
         switch (response.getCode()) {
             case ResponseCode.SUCCESS: {
+                // 获取返回的 reponseHeader
                 RegisterBrokerResponseHeader responseHeader =
                     (RegisterBrokerResponseHeader) response.decodeCommandCustomHeader(RegisterBrokerResponseHeader.class);
                 RegisterBrokerResult result = new RegisterBrokerResult();

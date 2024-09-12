@@ -62,6 +62,7 @@ public class EndTransactionProcessor implements NettyRequestProcessor {
             return response;
         }
 
+        //是否是server端主动发起的半事务消息检测
         if (requestHeader.getFromTransactionCheck()) {
             switch (requestHeader.getCommitOrRollback()) {
                 case MessageSysFlag.TRANSACTION_NOT_TYPE: {
@@ -121,30 +122,52 @@ public class EndTransactionProcessor implements NettyRequestProcessor {
                     return null;
             }
         }
+
+        //
         OperationResult result = new OperationResult();
+
+        //如果是事务提交操作
         if (MessageSysFlag.TRANSACTION_COMMIT_TYPE == requestHeader.getCommitOrRollback()) {
+
+            //提交当前消息到正真在topic队列中
             result = this.brokerController.getTransactionalMessageService().commitMessage(requestHeader);
             if (result.getResponseCode() == ResponseCode.SUCCESS) {
                 RemotingCommand res = checkPrepareMessage(result.getPrepareMessage(), requestHeader);
                 if (res.getCode() == ResponseCode.SUCCESS) {
+
+                    // 结束事务，创建新的Message，恢复真实的 Topic、queueId 等属性，重新写入 CommitLog
                     MessageExtBrokerInner msgInner = endMessageTransaction(result.getPrepareMessage());
                     msgInner.setSysFlag(MessageSysFlag.resetTransactionValue(msgInner.getSysFlag(), requestHeader.getCommitOrRollback()));
                     msgInner.setQueueOffset(requestHeader.getTranStateTableOffset());
                     msgInner.setPreparedTransactionOffset(requestHeader.getCommitLogOffset());
                     msgInner.setStoreTimestamp(result.getPrepareMessage().getStoreTimestamp());
+
+                    // 调用 sendFinalMessage 方法将消息重新写入 CommitLog
                     RemotingCommand sendResult = sendFinalMessage(msgInner);
                     if (sendResult.getCode() == ResponseCode.SUCCESS) {
+
+
+                        //事务消息提交，删除 Half 消息
+                        //Half消息不会真的被删除，通过写入 Op 消息来标记它被处理。
                         this.brokerController.getTransactionalMessageService().deletePrepareMessage(result.getPrepareMessage());
                     }
                     return sendResult;
                 }
                 return res;
             }
-        } else if (MessageSysFlag.TRANSACTION_ROLLBACK_TYPE == requestHeader.getCommitOrRollback()) {
+        }
+
+
+        // 如果是回滚
+        // 回滚事务消息，事实上没做任何处理
+        else if (MessageSysFlag.TRANSACTION_ROLLBACK_TYPE == requestHeader.getCommitOrRollback()) {
+
+            //回滚事务消息，事实上没做任何处理
             result = this.brokerController.getTransactionalMessageService().rollbackMessage(requestHeader);
             if (result.getResponseCode() == ResponseCode.SUCCESS) {
                 RemotingCommand res = checkPrepareMessage(result.getPrepareMessage(), requestHeader);
                 if (res.getCode() == ResponseCode.SUCCESS) {
+                    // 写入 Op 消息，代表 Half 消息被处理
                     this.brokerController.getTransactionalMessageService().deletePrepareMessage(result.getPrepareMessage());
                 }
                 return res;

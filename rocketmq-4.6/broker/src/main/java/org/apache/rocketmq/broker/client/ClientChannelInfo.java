@@ -20,10 +20,22 @@ import io.netty.channel.Channel;
 import org.apache.rocketmq.remoting.protocol.LanguageCode;
 
 public class ClientChannelInfo {
+
+    /**
+     * 客户端连接的channel，这里的客户端可能是producer也可能是consumer
+     */
     private final Channel channel;
+
+    /**
+     * 客户端id，这是唯一的
+     */
     private final String clientId;
     private final LanguageCode language;
     private final int version;
+
+    /**
+     * client 心跳最后上报的时间
+     */
     private volatile long lastUpdateTimestamp = System.currentTimeMillis();
 
     public ClientChannelInfo(Channel channel) {

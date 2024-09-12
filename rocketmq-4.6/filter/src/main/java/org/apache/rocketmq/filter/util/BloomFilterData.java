@@ -26,7 +26,14 @@ import java.util.Arrays;
  */
 public class BloomFilterData {
 
+    /**
+     * 对应bitmap中的index位置
+     */
     private int[] bitPos;
+
+    /**
+     * bitmap的长度
+     */
     private int bitNum;
 
     public BloomFilterData() {

@@ -26,13 +26,15 @@ import java.util.List;
 import org.apache.rocketmq.remoting.protocol.RemotingSerializable;
 
 public class TopicRouteData extends RemotingSerializable {
+    // order Topic 配置
     private String orderTopicConf;
 
-    //所有的分区信息
+    // 队列数据 list，该 topic 在每个 broker 上都有一个队列数据，在 broker 上有几个读写队列
     private List<QueueData> queueDatas;
-    //所有的 broker 组
+    // broker 数据 list topic 在哪些 broker 上面，每个 BrokerData 是一个组，每个组里有哪几台机器
     private List<BrokerData> brokerDatas;
 
+    // 过滤服务映射关系表，消息过滤时使用
     private HashMap<String/* brokerAddr */, List<String>/* Filter Server */> filterServerTable;
 
     public TopicRouteData cloneTopicRouteData() {

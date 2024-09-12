@@ -37,10 +37,12 @@ public class DefaultConsumerIdsChangeListener implements ConsumerIdsChangeListen
             return;
         }
         switch (event) {
+            //consumer group下的消费者成员变更
             case CHANGE:
                 if (args == null || args.length < 1) {
                     return;
                 }
+                // 如果实时通知消费者变更，则通知每个通道
                 List<Channel> channels = (List<Channel>) args[0];
                 if (channels != null && brokerController.getBrokerConfig().isNotifyConsumerIdsChangedEnable()) {
                     for (Channel chl : channels) {
@@ -48,9 +50,13 @@ public class DefaultConsumerIdsChangeListener implements ConsumerIdsChangeListen
                     }
                 }
                 break;
+
+                //消费者组中的所有成员都下线了
             case UNREGISTER:
                 this.brokerController.getConsumerFilterManager().unRegister(group);
                 break;
+
+                //有新的消费者被被添加到consumer group中了
             case REGISTER:
                 if (args == null || args.length < 1) {
                     return;

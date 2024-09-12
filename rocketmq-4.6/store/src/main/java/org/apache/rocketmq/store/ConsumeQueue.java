@@ -80,6 +80,14 @@ public class ConsumeQueue {
      */
     private ConsumeQueueExt consumeQueueExt = null;
 
+    /**
+     *
+     * @param topic topic
+     * @param queueId queueId
+     * @param storePath 存储的路径
+     * @param mappedFileSize mappedFileSize的大小 默认为 300000 * 20字节 = 5M左右
+     * @param defaultMessageStore
+     */
     public ConsumeQueue(
             final String topic,
             final int queueId,
@@ -517,7 +525,7 @@ public class ConsumeQueue {
 
         this.byteBufferIndex.flip();
         this.byteBufferIndex.limit(CQ_STORE_UNIT_SIZE);
-        this.byteBufferIndex.putLong(offset);
+        this.byteBufferIndex.putLong(offset); //设置在commit log中的offset
         this.byteBufferIndex.putInt(size);  //设置消息的大小
         this.byteBufferIndex.putLong(tagsCode);  //设置消息的tag信息
 

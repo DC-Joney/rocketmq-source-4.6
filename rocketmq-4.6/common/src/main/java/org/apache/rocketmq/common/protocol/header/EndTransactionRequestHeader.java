@@ -26,8 +26,12 @@ import org.apache.rocketmq.remoting.exception.RemotingCommandException;
 public class EndTransactionRequestHeader implements CommandCustomHeader {
     @CFNotNull
     private String producerGroup;
+
+    //ConsumeQueue offset
     @CFNotNull
     private Long tranStateTableOffset;
+
+    //消息在commit log中的物理偏移量
     @CFNotNull
     private Long commitLogOffset;
     @CFNotNull

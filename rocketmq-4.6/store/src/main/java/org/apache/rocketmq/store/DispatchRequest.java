@@ -25,6 +25,8 @@ public class DispatchRequest {
     private int msgSize;
     private final long tagsCode;
     private final long storeTimestamp;
+
+    //在consumeQueue中的offset位置
     private final long consumeQueueOffset;
     private final String keys;
     private final boolean success;
