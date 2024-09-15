@@ -125,6 +125,7 @@ public class ConsumerManageProcessor implements NettyRequestProcessor {
             (QueryConsumerOffsetRequestHeader) request
                 .decodeCommandCustomHeader(QueryConsumerOffsetRequestHeader.class);
 
+        //从consumerOffsetManager中获取该consumer group + topic + queueId最后消费的offset位置
         long offset =
             this.brokerController.getConsumerOffsetManager().queryOffset(
                 requestHeader.getConsumerGroup(), requestHeader.getTopic(), requestHeader.getQueueId());
@@ -133,7 +134,11 @@ public class ConsumerManageProcessor implements NettyRequestProcessor {
             responseHeader.setOffset(offset);
             response.setCode(ResponseCode.SUCCESS);
             response.setRemark(null);
-        } else {
+        }
+        //如果没有获取到则证明是第一次进行消费
+        else {
+
+            //从messageStore总获取该队列的最小offset位置
             long minOffset =
                 this.brokerController.getMessageStore().getMinOffsetInQueue(requestHeader.getTopic(),
                     requestHeader.getQueueId());

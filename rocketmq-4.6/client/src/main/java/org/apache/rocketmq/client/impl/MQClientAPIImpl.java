@@ -768,14 +768,34 @@ public class MQClientAPIImpl {
         final long timeoutMillis,
         final PullCallback pullCallback
     ) throws RemotingException, InterruptedException {
+
+        // 基于 netty 给 broker 发送异步消息，设置一个 InvokeCallback 回调对象，这里 invokeCallback 最重要
+        // invokeAsync 内部会为本次请求创建一个 ResponseFuture 对象，放入到 remotingClient 的 responseFutureTable 中，key 是 request.opaque。ResponseFuture { 1. opaque 2.invokeCallback  3. response}
+        // 当服务器端响应客户端时，会根据 response.opaque 值找到当前 responseFuture 对象，将结果设置到 responseFuture.response 字段。
+        // 接着会检查该 responseFuture.invokeCallback 是否有值，如果有值，则说明需要回调处理。
+        // 再接着就将该 invokeCallback 封装成任务，提交到 remotingClient 的 公共线程内执行，执行invokeCallback 的 operationComplete 方法。
+        // 传递参数：responseFuture
         this.remotingClient.invokeAsync(addr, request, timeoutMillis, new InvokeCallback() {
             @Override
             public void operationComplete(ResponseFuture responseFuture) {
+                // 获取服务器端响应数据 response
                 RemotingCommand response = responseFuture.getResponseCommand();
                 if (response != null) {
                     try {
+
+                        // 解析响应获取结果，将返回的内容封装成 pullResult
+                        // 从response内提取出来拉消息结果对象，会创建 PullResultExt 对象，根据下面的参数去 new:
+                        // 参数1：pullStatus 状态
+                        // 参数2：nextBeginOffset
+                        // 参数3：minOffset
+                        // 参数4：maxOffset
+                        // 参数5：msgFoundList ,这里null
+                        // 参数6：suggestWhichBrokerId，服务器端推荐下次该mq拉消息时 使用的 主机id
+                        // 参数7：messageBinary，消息列表二进制表示
                         PullResult pullResult = MQClientAPIImpl.this.processPullResponse(response);
                         assert pullResult != null;
+
+                        // 将 pullResult 交给 “拉消息结果处理回调对象”，调用它的 onSuccess 方法
                         pullCallback.onSuccess(pullResult);
                     } catch (Exception e) {
                         pullCallback.onException(e);

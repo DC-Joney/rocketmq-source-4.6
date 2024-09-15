@@ -22,7 +22,7 @@ import java.util.concurrent.atomic.AtomicLong;
 
 
 /**
- * IndexHeader 用于表示当前Index文件的范围包括hashSlot的实际长度以及索引的实际长度如下
+ * IndexHeader 用于表示当前Index文件的范围包括hashSlot的实际长度以及索引的实际长度如下 <pr/>
  *
  * |  8 (beginTimestamp)  |  8 (endTimestamp)  |  8 (beginPhyOffset)  |  8 (endPhyOffset) |  4 (hashSlotCount) | 4  (indexCount) |
  */

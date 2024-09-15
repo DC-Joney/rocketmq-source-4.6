@@ -29,6 +29,8 @@ public class MQClientManager {
     private final static InternalLogger log = ClientLogger.getLog();
     private static MQClientManager instance = new MQClientManager();
     private AtomicInteger factoryIndexGenerator = new AtomicInteger();
+
+    // factoryTable 缓存，保存了 clintId 和 MQClientInstance
     private ConcurrentMap<String/* clientId */, MQClientInstance> factoryTable =
         new ConcurrentHashMap<String, MQClientInstance>();
 
@@ -54,12 +56,18 @@ public class MQClientManager {
     //这里是为每一个客户端维护一个MQClientInstance实例，也就是说一个client instance下只存在一个MQClientInstance
     //即使创建了多个Producer也都是放在了同一个MQClientInstance中
     public MQClientInstance getOrCreateMQClientInstance(final ClientConfig clientConfig, RPCHook rpcHook) {
+
+        // 获取客户端ID
         String clientId = clientConfig.buildMQClientId();
+
+        // 根据客户端id缓存中获取 MQClientInstance
         MQClientInstance instance = this.factoryTable.get(clientId);
         if (null == instance) {
             instance =
                 new MQClientInstance(clientConfig.cloneClientConfig(),
                     this.factoryIndexGenerator.getAndIncrement(), clientId, rpcHook);
+
+            // 添加进 factoryTable 缓存
             MQClientInstance prev = this.factoryTable.putIfAbsent(clientId, instance);
             if (prev != null) {
                 instance = prev;

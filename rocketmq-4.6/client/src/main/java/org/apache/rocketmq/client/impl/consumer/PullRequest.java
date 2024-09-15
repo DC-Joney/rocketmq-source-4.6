@@ -18,10 +18,17 @@ package org.apache.rocketmq.client.impl.consumer;
 
 import org.apache.rocketmq.common.message.MessageQueue;
 
+// PullRequest 是一个对象，保存待拉取的消息队列和正在处理的队里 ProcessQueue 消息处理队列，从Broker 中拉取到的消息会先存入 ProccessQueue；
 public class PullRequest {
     private String consumerGroup;// 消费组
-    private MessageQueue messageQueue;//消息队列、请求所对应的消费队列topic的queue
-    private ProcessQueue processQueue;//处理队列，表示topic的queue的缓存消息，消息统计
+
+    // 待拉取的消息队列信息
+    private MessageQueue messageQueue;
+
+    // 消息处理队列，消息从 broker 中拉取以后会先存到该 ProcessQueue 中，然后再提交给消费者线程池进行消费
+    private ProcessQueue processQueue;
+
+    // 待拉取的 MessageQueue 偏移量，即 本次拉消息请求，使用offset （服务器端需要根据该 offset 进行定位消息位置，然后才可以获取一批消息）
     private long nextOffset; // 接下来要消费的offSet偏移
     private boolean lockedFirst = false;
 

@@ -36,9 +36,8 @@ import org.apache.rocketmq.common.protocol.header.QueryConsumerOffsetRequestHead
 import org.apache.rocketmq.common.protocol.header.UpdateConsumerOffsetRequestHeader;
 import org.apache.rocketmq.remoting.exception.RemotingException;
 
-/**
- * Remote storage implementation
- */
+//如果是集群模式 CLUSTERING，则创建 RemoteBrokerOffsetStore 对象，将消费者的 offset 存储到 broker 中，
+// 文件路径为当前用户主目录下的 store/config/consumerOffset.json。
 public class RemoteBrokerOffsetStore implements OffsetStore {
     private final static InternalLogger log = ClientLogger.getLog();
     private final MQClientInstance mQClientFactory;
@@ -88,8 +87,11 @@ public class RemoteBrokerOffsetStore implements OffsetStore {
                 }
                 case READ_FROM_STORE: {
                     try {
+                        //从consumerOffsetManager中获取该consumer group + topic + queueId最后消费的offset位置
+                        //如果consumerOffsetManager中不存在对应的offset，则通过defaultStore获取ConsumeQueue中最小的可被消费的offset位置
                         long brokerOffset = this.fetchConsumeOffsetFromBroker(mq);
                         AtomicLong offset = new AtomicLong(brokerOffset);
+                        //将其存储在本地
                         this.updateOffset(mq, offset.get(), false);
                         return brokerOffset;
                     }

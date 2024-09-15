@@ -141,47 +141,56 @@ public class DefaultMQPushConsumer extends ClientConfig implements MQPushConsume
     /**
      * Queue allocation algorithm specifying how message queues are allocated to each consumer clients.
      */
+    // 集群模式下消息队列的负载策略，指定如何将消息队列分配给每个使用者客户端。
     private AllocateMessageQueueStrategy allocateMessageQueueStrategy;
 
     /**
      * Subscription relationship
      */
+    // 订阅关系
     private Map<String /* topic */, String /* sub expression */> subscription = new HashMap<String, String>();
 
     /**
      * Message listener
      */
+    // 消息监听器
     private MessageListener messageListener;
 
     /**
      * Offset Storage
      */
+    // 消息消费进度存储器
     private OffsetStore offsetStore;
 
     /**
      * Minimum consumer thread number
      */
+    // 最小消费线程数
     private int consumeThreadMin = 20;
 
     /**
      * Max consumer thread number
      */
+    // 最大消费线程数，因为消费者线程池使用无界队列，所以此参数不生效
     private int consumeThreadMax = 20;
 
     /**
      * Threshold for dynamic adjustment of the number of thread pool
      */
+    // 动态调整线程池数量
     private long adjustThreadPoolNumsThreshold = 100000;
 
     /**
      * Concurrently max span offset.it has no effect on sequential consumption
      */
+    // 并发消息消费时处理队列最大跨度默认 2000，表示如果消息处理队列中偏移量最大的消息与偏移量最小的消息的跨度超过 2000，则延迟 50 ms后再拉取消息
     private int consumeConcurrentlyMaxSpan = 2000;
 
     /**
      * Flow control threshold on queue level, each message queue will cache at most 1000 messages by default,
      * Consider the {@code pullBatchSize}, the instantaneous value may exceed the limit
      */
+    // 默认 1000，表示每 1000 次流控后打印流控日志
     private int pullThresholdForQueue = 1000;
 
     /**
@@ -218,21 +227,25 @@ public class DefaultMQPushConsumer extends ClientConfig implements MQPushConsume
     /**
      * Message pull Interval
      */
+    // 推模式下拉取任务的间隔时间，默认一次拉取任务完成后继续拉取
     private long pullInterval = 0;
 
     /**
      * Batch consumption size
      */
+    // 消息并发消费时一次消费消息的条数，通俗点说，就是每次传入 MessageListener#consumeMessage 中的消息条数
     private int consumeMessageBatchMaxSize = 1;
 
     /**
      * Batch pull size
      */
+    // 每次消息拉取的条数，默认32条
     private int pullBatchSize = 32;
 
     /**
      * Whether update subscription relationship when every pull
      */
+    // 每次拉取时是否更新订阅关系,默认是false
     private boolean postSubscriptionWhenPull = false;
 
     /**
@@ -247,27 +260,32 @@ public class DefaultMQPushConsumer extends ClientConfig implements MQPushConsume
      * If messages are re-consumed more than {@link #maxReconsumeTimes} before success, it's be directed to a deletion
      * queue waiting.
      */
+    // 消息最大消费重试次数，如果消息消费最大次数超过maxReconsumeTimes还未成功，则消息将被转移到一个失败队列，等待被删除
     private int maxReconsumeTimes = -1;
 
     /**
      * Suspending pulling time for cases requiring slow pulling like flow-control scenario.
      */
+    //延迟将该队列的消息提交到消费者线程的等待时间，默认延迟1s
     private long suspendCurrentQueueTimeMillis = 1000;
 
     /**
      * Maximum amount of time in minutes a message may block the consuming thread.
      */
+    // 消息阻塞消费线程的最大超时时间，默认15分钟
     private long consumeTimeout = 15;
 
     /**
      * Interface of asynchronous transfer data
      */
+    // 关闭使用者时等待消息的最长时间，0表示没有等待。
     private TraceDispatcher traceDispatcher = null;
 
     /**
      * Default constructor.
      */
     public DefaultMQPushConsumer() {
+        // 指定了队列分配策略 AllocateMessageQueueAveragely
         this(null, MixAll.DEFAULT_CONSUMER_GROUP, null, new AllocateMessageQueueAveragely());
     }
 
@@ -336,6 +354,7 @@ public class DefaultMQPushConsumer extends ClientConfig implements MQPushConsume
         this.consumerGroup = consumerGroup;
         this.namespace = namespace;
         this.allocateMessageQueueStrategy = allocateMessageQueueStrategy;
+        // 消费消息对象，实际干活的
         defaultMQPushConsumerImpl = new DefaultMQPushConsumerImpl(this, rpcHook);
     }
 
@@ -695,9 +714,11 @@ public class DefaultMQPushConsumer extends ClientConfig implements MQPushConsume
     @Override
     public void start() throws MQClientException {
         setConsumerGroup(NamespaceUtil.wrapNamespace(this.getNamespace(), this.consumerGroup));
+        //启动消费者
         this.defaultMQPushConsumerImpl.start();
         if (null != traceDispatcher) {
             try {
+                //消息轨迹跟踪服务
                 traceDispatcher.start(this.getNamesrvAddr(), this.getAccessChannel());
             } catch (MQClientException e) {
                 log.warn("trace dispatcher start failed ", e);

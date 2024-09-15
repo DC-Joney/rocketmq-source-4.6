@@ -52,13 +52,14 @@ public class MappedFile extends ReferenceResource {
     //commitLog内存（ByteBuffer）写入位点，标记消息写到哪了，下次从该位置开始写。
      //在消息写完后递增，递增大小为消息的长度
 
-    // 1 mappedbytebuffer 文件系统缓存    2 专用写入缓存
+    //当前MappedFile写入的位置
     protected final AtomicInteger wrotePosition = new AtomicInteger(0);
 
-    //提交位置
+    //当前MappedFile提交的位置,专用于二级缓存writeByteBuffer
     protected final AtomicInteger committedPosition = new AtomicInteger(0);
 
     //文件系统缓存里边的内容，刷入磁盘的位置
+    //当前MappedFile刷入磁盘的位置
     private final AtomicInteger flushedPosition = new AtomicInteger(0);
 
     //文件大小
@@ -75,7 +76,9 @@ public class MappedFile extends ReferenceResource {
     //文件名称
     private String fileName;
 
-    //当前文件真实的offset位置，这里的fileFromOffset是针对与全局而言的
+    //fileFromOffset 可以是一个 mappedfile 文件的磁盘上起始的写入位置，因为每个 CommitLog 文件都是固定大小 1G，
+    // 所以根据 fileFromOffset +mappedFileSize 计算出新文件的磁盘起始写入位置
+    // fileFromOffset 是针对全局而言的
     private long fileFromOffset;
     private File file;
 
@@ -84,6 +87,7 @@ public class MappedFile extends ReferenceResource {
     private volatile long storeTimestamp = 0;
 
     //当前文件是否对应于MappedFileQueue中的第一个文件
+    //最新的MappedFile文件则是MappedFileQueue的第一个文件，既最近写入的文件
     private boolean firstCreateInQueue = false;
 
     public MappedFile() {
@@ -231,13 +235,17 @@ public class MappedFile extends ReferenceResource {
         // 若写入位置没有超过文件大小则继续顺序写入；
         int currentPos = this.wrotePosition.get();
 
+        //如果writePos小于文件的大小，说明还有空间可以写入数据
         if (currentPos < this.fileSize) {
             //由内存对象mappedByteBuffer创建一个指向同一块内存的ByteBuffer对象，并将内存对象的写入指针指向写入位置；
             ByteBuffer byteBuffer = writeBuffer != null ? writeBuffer.slice() : this.mappedByteBuffer.slice();
+            //将buffer的position设置为writePos
             byteBuffer.position(currentPos);
             AppendMessageResult result;
             //以文件的起始偏移量（fileFromOffset）、ByteBuffer对象、该内存对象剩余的空间（fileSize-wrotePostion）、消息对象msg为参数调用AppendMessageCallback回调类的doAppend方法；
             if (messageExt instanceof MessageExtBrokerInner) {
+
+                //将消息写入到byteBuffer中
                 result = cb.doAppend(this.getFileFromOffset(), byteBuffer, this.fileSize - currentPos, (MessageExtBrokerInner) messageExt);
             } else if (messageExt instanceof MessageExtBatch) {
                 result = cb.doAppend(this.getFileFromOffset(), byteBuffer, this.fileSize - currentPos, (MessageExtBatch) messageExt);
@@ -304,7 +312,11 @@ public class MappedFile extends ReferenceResource {
      * @return The current flushed position
      */
     public int flush(final int flushLeastPages) {
-        //通过isAbleToFlush检查 刷盘的条件 是否满足
+        /*
+         * 判断是否可以刷盘
+         * 如果文件已经满了，或者如果 flushLeastPages 大于 0，且脏页数量大于等于 flushLeastPages
+         * 或者如果 flushLeastPages 等于 0 并且存在脏数据，这几种情况都会进行刷盘
+         */
         if (this.isAbleToFlush(flushLeastPages)) {
             if (this.hold()) {
 
@@ -314,8 +326,10 @@ public class MappedFile extends ReferenceResource {
 
                 try {
 
+                    // 只将数据追加到 fileChannel 或 mappedByteBuffer 中，不会同时追加到这两个里面
                     //We only append data to fileChannel or mappedByteBuffer, never both.
                     if (writeBuffer != null || this.fileChannel.position() != 0) {
+                        // 如果使用了堆外内存，那么通过 fileChannel 强制刷盘，这是异步堆外内存执行的逻辑
                         this.fileChannel.force(false);
                     } else {
 
@@ -356,8 +370,11 @@ public class MappedFile extends ReferenceResource {
         }
 
         // All dirty data has been committed to FileChannel.
+        // 所有的脏数据被提交到了 FileChannel，那么归还堆外内存
         if (writeBuffer != null && this.transientStorePool != null && this.fileSize == this.committedPosition.get()) {
+            // 将堆外内存重置，并存入内存 availableBuffer 的头部
             this.transientStorePool.returnBuffer(writeBuffer);
+            // 将 writeBuffer 置为 null，下次再重新获取
             this.writeBuffer = null;
         }
 
@@ -398,6 +415,7 @@ public class MappedFile extends ReferenceResource {
         //write记录的是当前消息内容写入后的位置
         int write = getReadPosition();
 
+        // 如果文件已经满了，那么返回 true
         if (this.isFull()) {
             return true;
         }
@@ -407,18 +425,29 @@ public class MappedFile extends ReferenceResource {
 
             // 在异步刷盘中，flushLeastPages 是 4，
             // 也就是说，只有当缓存的消息至少是4（page个数）*4K（page大小）= 16K时，异步刷盘才会将缓存写入文件
-
             return ((write / OS_PAGE_SIZE) - (flush / OS_PAGE_SIZE)) >= flushLeastPages;
         }
 
-        //同步刷盘时，flushLeastPages是0，不对page要求，只要有缓存有内容就会刷盘；
+        //否则 flushLeastPages 为 0，那么只要写入位置大于刷盘位置，即存在脏数据就会进行刷盘
          return write > flush;
     }
 
+    /**
+     * 是否支持提交
+     * 1. 首先获取提交位置 commit 和写入位置 write。
+     * 2. 判断如果文件满了，即写入位置等于文件大小，那么直接返回 true。
+     * 3. 如果至少提交的页数 commitLeastPages 大于 0，则需要比较写入位置与提交位置的差值，当差值大于指定的最少页数才可以进行提交，此举可以防止频繁提交。
+     * 3. 否则 commitLeastPages 为 0，那么只要写入位置大于提交位置，即存在脏数据此时就一定会提交。
+     * @param commitLeastPages 至少提交的页数
+     * @return
+     */
     protected boolean isAbleToCommit(final int commitLeastPages) {
+        // 获取提交位置
         int flush = this.committedPosition.get();
+        // 获取写入位置
         int write = this.wrotePosition.get();
 
+        // 如果文件已经满了，那么返回 true
         if (this.isFull()) {
             return true;
         }
@@ -434,6 +463,7 @@ public class MappedFile extends ReferenceResource {
             return ((write / OS_PAGE_SIZE) - (flush / OS_PAGE_SIZE)) >= commitLeastPages;
         }
 
+        // 否则 commitLeastPages 为 0，那么只要写入位置大于提交位置，即存在脏数据就会进行提交
         return write > flush;
     }
 

@@ -171,7 +171,7 @@ public class MQClientInstance {
         this.nettyClientConfig.setClientCallbackExecutorThreads(clientConfig.getClientCallbackExecutorThreads());
         this.nettyClientConfig.setUseTLS(clientConfig.isUseTLS());
 
-        // 客户端处理器,比如在集群消费模式下，有新的消费者加入，则通知消费者客户端重平衡,主要是给消费者用的，这里可以忽略
+        // 客户端处理器,比如在集群消费模式下，有新的消费者加入，则通知消费者客户端重平衡
         this.clientRemotingProcessor = new ClientRemotingProcessor(this);
 
         // 初始化远程客户端 NRC(Netty Remoting Client)，注册功能与 clientRemotingProcessor 的映射关系
@@ -192,8 +192,10 @@ public class MQClientInstance {
 
         this.mQAdminImpl = new MQAdminImpl(this);
 
+        // 启动拉取消息服务
         this.pullMessageService = new PullMessageService(this);
 
+        // 启动负载均衡服务
         this.rebalanceService = new RebalanceService(this);
 
         this.defaultMQProducer = new DefaultMQProducer(MixAll.CLIENT_INNER_PRODUCER_GROUP);

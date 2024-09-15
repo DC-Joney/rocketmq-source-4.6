@@ -25,18 +25,27 @@ import org.apache.rocketmq.remoting.common.SemaphoreReleaseOnlyOnce;
 import org.apache.rocketmq.remoting.protocol.RemotingCommand;
 
 public class ResponseFuture {
+
+    //请求的requestId
     private final int opaque;
+
+    //用于处理的channel
     private final Channel processChannel;
 
+    //response请求的超时时间
     private final long timeoutMillis;
 
     //响应到来的回调
     private final InvokeCallback invokeCallback;
+
+
+    //请求开始是的时间，因为要计算是否超时
     private final long beginTimestamp = System.currentTimeMillis();
 
-    //同步等待闭锁
+    //同步等待闭锁，在同步请求后，会通过countDownLatch.await(timeoutMillis)进行等待
     private final CountDownLatch countDownLatch = new CountDownLatch(1);
 
+    //用于客户端请求的并发限流
     private final SemaphoreReleaseOnlyOnce once;
 
     private final AtomicBoolean executeCallbackOnlyOnce = new AtomicBoolean(false);
@@ -46,6 +55,8 @@ public class ResponseFuture {
 
     //发送成功标记
     private volatile boolean sendRequestOK = true;
+
+    //请求异常时的原因
     private volatile Throwable cause;
 
     public ResponseFuture(Channel channel, int opaque, long timeoutMillis, InvokeCallback invokeCallback,

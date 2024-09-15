@@ -29,7 +29,19 @@ import java.util.List;
 public class ConsumeQueue {
     private static final InternalLogger log = InternalLoggerFactory.getLogger(LoggerName.STORE_LOGGER_NAME);
 
-    //拉取消息时用到， 存储消息也用到  存储条目的大小, 其中8字节
+    /**
+     * 存储单元，一个单元20字节
+     * ConsumeQueue's store unit. Format:
+     * <pre>
+     * ┌───────────────────────────────┬───────────────────┬───────────────────────────────┐
+     * │    CommitLog Physical Offset  │      Body Size    │            Tag HashCode       │
+     * │          (8 Bytes)            │      (4 Bytes)    │             (8 Bytes)         │
+     * ├───────────────────────────────┴───────────────────┴───────────────────────────────┤
+     * │                                     Store Unit                                    │
+     * │                                                                                   │
+     * </pre>
+     * ConsumeQueue's store unit. Size: CommitLog Physical Offset(8) + Body Size(4) + Tag HashCode(8) = 20 Bytes
+     */
     public static final int CQ_STORE_UNIT_SIZE = 20;
     private static final InternalLogger LOG_ERROR = InternalLoggerFactory.getLogger(LoggerName.STORE_ERROR_LOGGER_NAME);
 
@@ -66,7 +78,7 @@ public class ConsumeQueue {
     private final int mappedFileSize;
 
     /**
-     * 最大的物理偏移量
+     * 已知为Commit log 构建索引的commit log中最新的 offsetPy
      */
     private long maxPhysicOffset = -1;
 
@@ -529,14 +541,16 @@ public class ConsumeQueue {
         this.byteBufferIndex.putInt(size);  //设置消息的大小
         this.byteBufferIndex.putLong(tagsCode);  //设置消息的tag信息
 
-        //希望拼接到的偏移量=commitLog中的QUEUEOFFSET*20， consumeQueueOffset * UNIT_SIZE = 实际在ConsumeQueue中的offset
+        //希望拼接到的偏移量=commitLog中的QUEUEOFFSET*20，
+        // consumeQueueOffset * UNIT_SIZE = 实际在ConsumeQueue中 的 offsetPy
         final long expectLogicOffset = cqOffset * CQ_STORE_UNIT_SIZE;
 
-        //从映射文件队列中获取最后一个映射文件
+        //根据offsetPy获取对应的MappedFile文件
         MappedFile mappedFile = this.mappedFileQueue.getLastMappedFile(expectLogicOffset);
         if (mappedFile != null) {
 
-            //映射文是第一个创建、consumerOffset不是0，映射文件写位置是0
+            //如果MappedFile是新创建的文件、consumerOffset不是0，映射文件写位置是0
+            //那么就将minLogicOffset设置为当前计算出来的索引的offsetPy
             if (mappedFile.isFirstCreateInQueue() && cqOffset != 0 && mappedFile.getWrotePosition() == 0) {
                 //设置最小的逻辑偏移量 为 对应消息的起始偏移量
                 this.minLogicOffset = expectLogicOffset;

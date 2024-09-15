@@ -34,6 +34,9 @@ public class MappedFileQueue {
 
     private final String storePath;
 
+    /**
+     * Mapped file的文件大小，存储不同的文件时大小是不同的
+     */
     private final int mappedFileSize;
 
     private final CopyOnWriteArrayList<MappedFile> mappedFiles = new CopyOnWriteArrayList<MappedFile>();
@@ -148,9 +151,11 @@ public class MappedFileQueue {
         File[] files = dir.listFiles();
         if (files != null) {
             // ascending order
+            // 1、对 CommitLog 文件按照文件名升序排序
             Arrays.sort(files);
             for (File file : files) {
 
+                // 3、校验文件实际大小是否等于预定的文件大小，如果不相等则直接返回 fa1se，不再加载其他文件
                 if (file.length() != this.mappedFileSize) {
                     log.warn(file + "\t" + file.length()
                             + " length not matched message store config value, please check it manually");
@@ -158,11 +163,27 @@ public class MappedFileQueue {
                 }
 
                 try {
+                    /*
+                     * 4、核心逻辑：实例化 MappedFile 对象， 通过 DefaultMappedFile 类生成
+                     * 每一个 CommitLog 文件都创建一个对应的 MappedFile 对象
+                     * 在物理上，CommitLog 日录下面是一个个的 CommitLog 文件，但是在 ]ava 中进行了三层映射: CommitLog -> MappedFileQueue -> MappedFile
+                     * CommitLog 中包含 MappedFileQueue，以及 CommitLog 相关的其他服务，例如:刷盘服务: MappedFileQueue 中包含 MappedFile 集合，以及单个 CommitLog 文件大小等属性
+                     * 而 MappedFile 才是真正的一个 CommitLog 文件在 Java 中的映射，包含文件名、大小、mmap 对象 mappedByteBuffer 等属性
+                     * 实际上 MappedFileQueue 和 MappedFile 都是通用类 CommitLog、ConsumeQueue、IndexFile 文件都会使用到。
+                     */
                     MappedFile mappedFile = new MappedFile(file.getPath(), mappedFileSize);
 
+                    // 将 wrotePosition、flushedPosition、commitPosition 默认设置为文件大小
+                    // 5、当前文件所映射到的消息写入 page cache 的位置
                     mappedFile.setWrotePosition(this.mappedFileSize);
+
+                    // 6、刷盘的最新位置
                     mappedFile.setFlushedPosition(this.mappedFileSize);
+
+                    // 7、已提交的最新位置
                     mappedFile.setCommittedPosition(this.mappedFileSize);
+
+                    // 8、添加到 MappedFileQueue 内部的 mappedFiles 集合中
                     this.mappedFiles.add(mappedFile);
                     log.info("load " + file.getPath() + " OK");
                 } catch (IOException e) {
@@ -191,6 +212,8 @@ public class MappedFileQueue {
     }
 
     public MappedFile getLastMappedFile(final long startOffset, boolean needCreate) {
+
+        // 初始化创建 offset
         long createOffset = -1;
 
         // 获取要写入的CommitLog文件对应的 MappedFile
@@ -200,15 +223,16 @@ public class MappedFileQueue {
         //mappedFileLast 为空或者最后一个对象对应的文件已经写满，
         // 则创建一个新的文件（即新的 MapedFile 对象） ；
         // 计算出新文件的起始偏移量（起始偏移量就是文件名称）
-
         if (mappedFileLast == null) {
             createOffset = startOffset - (startOffset % this.mappedFileSize);
         }
 
+        // 如果 mappedFileLast 满了，那么设置新的 mappedFile 文件的创建索引 = 上一个文件的起始索引（即文件名） + mappedFileSize
         if (mappedFileLast != null && mappedFileLast.isFull()) {
             createOffset = mappedFileLast.getFileFromOffset() + this.mappedFileSize;
         }
 
+        // 如果需要创建新的 mappedFile，那么根据起始索引创建新的 mappedFile
         if (createOffset != -1 && needCreate) {
 
             //下一个文件
@@ -222,7 +246,6 @@ public class MappedFileQueue {
             // 判断 allocateMappedFileService 服务是否初始化，
             // 并创建下一个文件和下下一个文件
             if (this.allocateMappedFileService != null) {
-
                 mappedFile = this.allocateMappedFileService.putRequestAndReturnMappedFile(nextFilePath,
                         nextNextFilePath, this.mappedFileSize);
             } else {
@@ -317,6 +340,9 @@ public class MappedFileQueue {
         return -1;
     }
 
+    /**
+     * 获取MappedFileQueue中最大的offsetPy，既最后一个MappedFile的fileFromOffset + writePos
+     */
     public long getMaxOffset() {
         MappedFile mappedFile = getLastMappedFile();
         if (mappedFile != null) {
@@ -441,13 +467,18 @@ public class MappedFileQueue {
     }
 
     /**
-     * 对于同步刷盘时，flushLeastPages = 0
+     * 执行刷盘：同步和异步刷盘服务，最终否是调用 MappedFileQueue#flush 方法执行刷盘
+     * 主要步骤：
+     *  1、首先根据最新刷盘物理位置 flushWhere 去查找到对应的 MappedFile。
+     *  2、如果 flushWhere 为 0，表示还没有开始写消息，则获取第一个 MappedFile。
+     *  3、然后调用 mappedFile#flush 方法执行真正的刷盘操作。
+     * @param flushLeastPages  最少刷盘的页数
+     * @return
      */
     public boolean flush(final int flushLeastPages) {
         boolean result = true;
         // 这里首先根据  上一次刷盘完成后的offset : flushedWhere ，
         // 通过findMappedFileByOffset方法，找到需要刷盘的MapppedFile文件，既当前commit log 文件
-        //
         MappedFile mappedFile = this.findMappedFileByOffset(this.flushedWhere, this.flushedWhere == 0);
         if (mappedFile != null) {
             long tmpTimeStamp = mappedFile.getStoreTimestamp();
@@ -455,9 +486,7 @@ public class MappedFileQueue {
             // 执行刷盘
             int offset = mappedFile.flush(flushLeastPages);
 
-            // 计算新的 位置，既当前文件的全局全局物理偏移量 + MappedFile当前刷盘位置的offset
-            // 举个例子：当前文件的名称为 1024，那么1024就是为全局物理偏移量 + MappedFile的刷盘位置假设为500
-            // 那么flushWhere = 1024 + 500 既全局的物理刷盘位置
+            // 获取最新刷盘物理偏移量，既当前文件的fileFromOffset + writePos
             long where = mappedFile.getFileFromOffset() + offset;
             result = where == this.flushedWhere;
 
@@ -472,13 +501,27 @@ public class MappedFileQueue {
         return result;
     }
 
+    /**
+     * 提交刷盘：
+     * 主要步骤：
+     *  1、首先根据最新提交物理位置 committedWhere，去找到对应的 MappedFile。如果 committedWhere 为 0，表示还没有开始写消息，则获取第一个 MappedFile。
+     *  2、然后调用 DefaultMappedFile#commit 方法执行真正的提交操作
+     * @param commitLeastPages   最少提交的页数
+     * @return   如果 false 表示提交了部分数据
+     */
     public boolean commit(final int commitLeastPages) {
         boolean result = true;
+        // 根据最新提交的物理位置 committedWhere，去找到对应的 MappedFile。
+        // 如果 committedWhere 为 0，表示还没有开始提交消息，则获取第一个 MappedFile
         MappedFile mappedFile = this.findMappedFileByOffset(this.committedWhere, this.committedWhere == 0);
         if (mappedFile != null) {
+            //执行提交操作
             int offset = mappedFile.commit(commitLeastPages);
+            // 获取最新提交物理偏移量
             long where = mappedFile.getFileFromOffset() + offset;
+            // 如果不相等表示只是提交了部分数据
             result = where == this.committedWhere;
+            //更新commit where的位置
             this.committedWhere = where;
         }
 

@@ -19,14 +19,34 @@ package org.apache.rocketmq.store;
 import java.util.Map;
 
 public class DispatchRequest {
+
+    /**
+     * 消息所在的topic
+     */
     private final String topic;
+
+    /**
+     * 消息所在的queueId
+     */
     private final int queueId;
+
+    //消息在commit log中的offsetPy
     private final long commitLogOffset;
+
+    /**
+     * 消息的存储大小
+     */
     private int msgSize;
     private final long tagsCode;
+
+    /**
+     * 消息存储的时间
+     */
     private final long storeTimestamp;
 
-    //在consumeQueue中的offset位置
+    /**
+     * 消息在queue中的offset
+     */
     private final long consumeQueueOffset;
     private final String keys;
     private final boolean success;

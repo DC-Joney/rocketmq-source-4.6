@@ -192,6 +192,14 @@ public class TopicConfigManager extends ConfigManager {
         return this.topicConfigTable.get(topic);
     }
 
+    /**
+     *
+     * @param topic   要创建的 topic
+     * @param defaultTopic   默认 topic，根据这个默认 topic 新建 topic，客户端发送过来的默认topic为 TBW102
+     * @param remoteAddress 客户端机器地址
+     * @param clientDefaultTopicQueueNums 默认的队列数，生产者发送过来的默认队列数为 4
+     * @param topicSysFlag 是否为系统主题，默认 false
+     */
 
     public TopicConfig createTopicInSendMessageMethod(final String topic, final String defaultTopic,
         final String remoteAddress, final int clientDefaultTopicQueueNums, final int topicSysFlag) {

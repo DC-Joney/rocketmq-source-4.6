@@ -526,6 +526,8 @@ public class DefaultMessageStore implements MessageStore {
 
             // 获取最小和最大的逻辑offset
             minOffset = consumeQueue.getMinOffsetInQueue();
+
+            //这里的offset是指的是queue中的offset
             maxOffset = consumeQueue.getMaxOffsetInQueue();
 
             //逻辑offset进行校验，逻辑offset不能越界，消费队列最大的逻辑offset为空就代表没有消息
@@ -1181,9 +1183,11 @@ public class DefaultMessageStore implements MessageStore {
     }
 
     public ConsumeQueue findConsumeQueue(String topic, int queueId) {
+        // 从消费队列表中获取特定主题的消费队列映射
         ConcurrentMap<Integer, ConsumeQueue> map = consumeQueueTable.get(topic);
         if (null == map) {
             ConcurrentMap<Integer, ConsumeQueue> newMap = new ConcurrentHashMap<Integer, ConsumeQueue>(128);
+            // 如果之前不存在，则将新 map 加入消费队列表
             ConcurrentMap<Integer, ConsumeQueue> oldMap = consumeQueueTable.putIfAbsent(topic, newMap);
             if (oldMap != null) {
                 map = oldMap;
@@ -1192,12 +1196,16 @@ public class DefaultMessageStore implements MessageStore {
             }
         }
 
+        // 从映射中获取特定队列 ID 的消费队列
         ConsumeQueue logic = map.get(queueId);
         if (null == logic) {
+
+            // 创建默认的消费队列实例
             ConsumeQueue newLogic = new ConsumeQueue(
                     topic,
                     queueId,
                     StorePathConfigHelper.getStorePathConsumeQueue(this.messageStoreConfig.getStorePathRootDir()),
+                    // 消费队列文件大小，映射 MappedFile，既MappedFile的大小，每个ConsumeQueue存储了30W个索引
                     this.getMessageStoreConfig().getMappedFileSizeConsumeQueue(),
                     this);
             ConsumeQueue oldLogic = map.putIfAbsent(queueId, newLogic);
@@ -1478,7 +1486,9 @@ public class DefaultMessageStore implements MessageStore {
     }
 
     public void putMessagePositionInfo(DispatchRequest dispatchRequest) {
+        //通过topic+queueId获取对应的consumeQueue，如果不存在则创建一个新的ConsumeQueue存放到consumeQueueTable
         ConsumeQueue cq = this.findConsumeQueue(dispatchRequest.getTopic(), dispatchRequest.getQueueId());
+        //构建consumeQueue的索引
         cq.putMessagePositionInfoWrapper(dispatchRequest);
     }
 
@@ -1534,16 +1544,19 @@ public class DefaultMessageStore implements MessageStore {
         }, 6, TimeUnit.SECONDS);
     }
 
+    //会先获取主题 topic 和队列 queueId 所在的消费队列 ConsumeQueue，然后将消息写入消费队列中。
     class CommitLogDispatcherBuildConsumeQueue implements CommitLogDispatcher {
 
         @Override
         public void dispatch(DispatchRequest request) {
             final int tranType = MessageSysFlag.getTransactionValue(request.getSysFlag());
             switch (tranType) {
+                // 如果为非事务消息 || 已提交的事务消息 才执行分发
                 case MessageSysFlag.TRANSACTION_NOT_TYPE:
                 case MessageSysFlag.TRANSACTION_COMMIT_TYPE:
                     DefaultMessageStore.this.putMessagePositionInfo(request);
                     break;
+                // 如果为预备的事务消息 || 回滚的事务消息 什么都不执行
                 case MessageSysFlag.TRANSACTION_PREPARED_TYPE:
                 case MessageSysFlag.TRANSACTION_ROLLBACK_TYPE:
                     break;
@@ -1868,11 +1881,19 @@ public class DefaultMessageStore implements MessageStore {
         }
 
         private void doReput() {
+
+            // 如果待转发的偏移量小于 CommitLog 的最小偏移量，初始化重新投递的起始偏移量为第一个 MappedFile 的 fileFromOffset
             if (this.reputFromOffset < DefaultMessageStore.this.commitLog.getMinOffset()) {
                 log.warn("The reputFromOffset={} is smaller than minPyOffset={}, this usually indicate that the dispatch behind too much and the commitlog has expired.",
                         this.reputFromOffset, DefaultMessageStore.this.commitLog.getMinOffset());
+
+                // 将 reputFromOffset 设置为 CommitLog 的最小偏移量
                 this.reputFromOffset = DefaultMessageStore.this.commitLog.getMinOffset();
             }
+
+
+            // 循环执行消息转发直到没有新消息或者处理完当前文件
+            // CommitLog 可用则一直进行循环扫描
             for (boolean doNext = true; this.isCommitLogAvailable() && doNext; ) {
 
                 if (DefaultMessageStore.this.getMessageStoreConfig().isDuplicationEnable()
@@ -1880,32 +1901,51 @@ public class DefaultMessageStore implements MessageStore {
                     break;
                 }
 
+                // 从 CommitLog 中上一条消息的结束位置开始获取下一条消息
                 SelectMappedBufferResult result = DefaultMessageStore.this.commitLog.getData(reputFromOffset);
                 if (result != null) {
                     try {
+                        // 设置当前处理的偏移量为 result 的起始偏移量
                         this.reputFromOffset = result.getStartOffset();
 
+                        // 循环处理每一条消息，直到达到待拉取的偏移量或者处理完当前文件
                         for (int readSize = 0; readSize < result.getSize() && doNext; ) {
 
+                            // 检查消息是否合法，返回要分发的请求，依次读取每一条消息，构建消息的DispatchRequest
                             DispatchRequest dispatchRequest =
                                     DefaultMessageStore.this.commitLog.checkMessageAndReturnSize(result.getByteBuffer(), false, false);
 
+                            // 获取消息大小
                             int size = dispatchRequest.getBufferSize() == -1 ? dispatchRequest.getMsgSize() : dispatchRequest.getBufferSize();
 
+                            // 如果消息处理成功
                             if (dispatchRequest.isSuccess()) {
+
+                                // 如果消息大小大于 0
                                 if (size > 0) {
+
+                                    // 执行消息分发，分发到 ConsumeQueue 和 IndexService
                                     DefaultMessageStore.this.doDispatch(dispatchRequest);
 
+                                    // 如果开启长轮询且消息到达监听器不为空
+                                    // 通知消息消费长轮询线程，有新的消息落盘，立即唤醒挂起的消息拉取请求
                                     if (BrokerRole.SLAVE != DefaultMessageStore.this.getMessageStoreConfig().getBrokerRole()
                                             && DefaultMessageStore.this.brokerConfig.isLongPollingEnable()) {
-                                        DefaultMessageStore.this.messageArrivingListener.arriving(dispatchRequest.getTopic(),
+
+                                        // 触发消息到达事件通知
+
                                                 dispatchRequest.getQueueId(), dispatchRequest.getConsumeQueueOffset() + 1,
                                                 dispatchRequest.getTagsCode(), dispatchRequest.getStoreTimestamp(),
                                                 dispatchRequest.getBitMap(), dispatchRequest.getPropertiesMap());
                                     }
 
+                                    // 更新待转发消息的偏移量
                                     this.reputFromOffset += size;
+
+                                    // 更新读取的消息大小
                                     readSize += size;
+
+                                    // 如果不启用消息去重 && 当前 Broker 角色为 Slave
                                     if (DefaultMessageStore.this.getMessageStoreConfig().getBrokerRole() == BrokerRole.SLAVE) {
                                         DefaultMessageStore.this.storeStatsService
                                                 .getSinglePutMessageTopicTimesTotal(dispatchRequest.getTopic()).incrementAndGet();
@@ -1913,23 +1953,32 @@ public class DefaultMessageStore implements MessageStore {
                                                 .getSinglePutMessageTopicSizeTotal(dispatchRequest.getTopic())
                                                 .addAndGet(dispatchRequest.getMsgSize());
                                     }
-                                } else if (size == 0) {
+                                }
+                                // 返回成功而且 size = 0，说明是读到文件末尾的空消息了，表示这个文件读到末尾了
+                                else if (size == 0) {
+                                    // 使 reputFromOffset 指向下一个 MappedFile 文件，继续处理
                                     this.reputFromOffset = DefaultMessageStore.this.commitLog.rollNextFile(this.reputFromOffset);
                                     readSize = result.getSize();
                                 }
                             } else if (!dispatchRequest.isSuccess()) {
 
+                                // 如果消息处理失败
                                 if (size > 0) {
                                     log.error("[BUG]read total count not equals msg total size. reputFromOffset={}", reputFromOffset);
+
+                                    // 更新待转发消息的偏移量
                                     this.reputFromOffset += size;
                                 } else {
+                                    // 如果消息大小为 0，设置 doNext 为 false
                                     doNext = false;
                                     // If user open the dledger pattern or the broker is master node,
                                     // it will not ignore the exception and fix the reputFromOffset variable
+                                    // 如果启用 DLedger CommitLog 或者 Broker 角色为 Master
                                     if (DefaultMessageStore.this.getMessageStoreConfig().isEnableDLegerCommitLog() ||
                                             DefaultMessageStore.this.brokerConfig.getBrokerId() == MixAll.MASTER_ID) {
                                         log.error("[BUG]dispatch message to consume queue error, COMMITLOG OFFSET: {}",
                                                 this.reputFromOffset);
+                                        // 修复 reputFromOffset 变量
                                         this.reputFromOffset += result.getSize() - readSize;
                                     }
                                 }

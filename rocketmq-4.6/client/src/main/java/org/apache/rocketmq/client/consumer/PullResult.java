@@ -21,19 +21,21 @@ import org.apache.rocketmq.common.message.MessageExt;
 
 public class PullResult {
     private final PullStatus pullStatus;
+
+    //下次开始拉取时的queue的 offset值
     private final long nextBeginOffset;
 
     /**
-     * 拉取消息的最小offset
+     * 该consumeQueue中最小的offset，offset指的是queue中的offset
      */
     private final long minOffset;
 
     /**
-     * 拉取消息的最大offset
+     * 该consumeQueue中最大的offset，offset指的是queue中的offset
      */
     private final long maxOffset;
 
-    //从messageStore拉取的所有的消息
+    //从messageStore拉取该messageQueue的所有的消息
     private List<MessageExt> msgFoundList;
 
     public PullResult(PullStatus pullStatus, long nextBeginOffset, long minOffset, long maxOffset,

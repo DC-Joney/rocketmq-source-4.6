@@ -23,7 +23,7 @@ public class AppendMessageResult {
     // Return code
     private AppendMessageStatus status;
     // Where to start writing
-    // 写入的物理偏移量。
+    // 写入的物理偏移量。，这是对于全部MappedFile而言的
     private long wroteOffset;
     // 写入字节总长度 Write Bytes
     private int wroteBytes;
@@ -31,7 +31,7 @@ public class AppendMessageResult {
     private String msgId;
     // Message storage timestamp 消息存储时间，也就是写入到 MappedFile 中的时间
     private long storeTimestamp;
-    // 逻辑的 Consume queue偏移量  Consume queue's offset(step by one)
+    // queue的offset值
     private long logicsOffset;
 
     //写入到 MappedByteBuffer (将消息内容写入到内存映射文件中的时长)

@@ -35,9 +35,9 @@ import org.apache.rocketmq.logging.InternalLogger;
 import org.apache.rocketmq.common.message.MessageQueue;
 import org.apache.rocketmq.remoting.exception.RemotingException;
 
-/**
- * Local storage implementation
- */
+//如果是广播模式 BROADCASTING， 则创建 LocalFileOffsetStore 对象，将消费者的 offset 存储到本地，
+// 默认文件路径为当前用户主目录下的 ${user.home}/.rocketmq_offsets/clientId/consumerGroup/offsets.json。
+// 其中 clientId 为当前消费者id，默认为 ip@default，consumerGroup为消费者组名称。
 public class LocalFileOffsetStore implements OffsetStore {
     public final static String LOCAL_OFFSET_STORE_DIR = System.getProperty(
         "rocketmq.client.localOffsetStoreDir",

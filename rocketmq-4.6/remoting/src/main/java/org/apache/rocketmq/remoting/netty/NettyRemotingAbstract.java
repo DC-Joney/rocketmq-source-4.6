@@ -286,17 +286,24 @@ public abstract class NettyRemotingAbstract {
      * @param cmd response command instance.
      */
     public void processResponseCommand(ChannelHandlerContext ctx, RemotingCommand cmd) {
+        //获取requestId
         final int opaque = cmd.getOpaque();
+        //从responseTable中获取对应的future
         final ResponseFuture responseFuture = responseTable.get(opaque);
+        //如果不为空默认该请求没有超时，或者非同步请求
         if (responseFuture != null) {
             responseFuture.setResponseCommand(cmd);
 
             responseTable.remove(opaque);
 
+            //如果是异步方法则触发回调
             if (responseFuture.getInvokeCallback() != null) {
                 executeInvokeCallback(responseFuture);
             } else {
+                //如果是同步方法则将数据放入到responseFuture中，
+                // 然后调用countDown方法唤醒阻塞客户端
                 responseFuture.putResponse(cmd);
+                //释放信号量
                 responseFuture.release();
             }
         } else {
@@ -416,13 +423,11 @@ public abstract class NettyRemotingAbstract {
 
         //opaque 对应于request ID
         //RemotingCommand会为每一个request产生一个request ID, 从0开始, 每次加1
-
         final int opaque = request.getOpaque();
 
         try {
             //根据request ID构建ResponseFuture
             final ResponseFuture responseFuture = new ResponseFuture(channel, opaque, timeoutMillis, null, null);
-
             //将ResponseFuture放入responseTable
             //定时任务会定时扫描responseTable中超时的任务
             this.responseTable.put(opaque, responseFuture);
